@@ -1,6 +1,25 @@
 # WebHub Adapter Usage Guide
 
-How to use the WebHub Adapter with automatic performance degradation.
+Connect your website to WebHub Backend with just **two parameters**.
+
+## Overview
+
+The WebHub Adapter connects a website to the WebHub Backend using:
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| `webhubUrl` | WebHub Backend deployment URL | ✅ Yes |
+| `accessToken` | Channel secret/key | ✅ Yes |
+| `channelId` | Channel identifier | ✅ Yes |
+
+**One WebHub Backend → Multiple Channels**
+
+```
+WebHub Backend (https://webhub.xiaolai.com)
+├── Channel #1 (channelId: wh_001, secret: xxx) → Website A
+├── Channel #2 (channelId: wh_002, secret: yyy) → Website B
+└── Channel #3 (channelId: wh_003, secret: zzz) → Website C
+```
 
 ## Quick Start
 
@@ -10,72 +29,107 @@ How to use the WebHub Adapter with automatic performance degradation.
 npm install @openclaw/channel-sdk
 ```
 
-### 2. Configure Channel (Set webhubUrl in config)
+### 2. Connect to WebHub
 
 ```typescript
 import { Channel, ChannelConfig } from '@openclaw/channel-sdk';
 import { WebHubAdapter } from '@openclaw/channel-sdk/adapters/webhub';
 
-interface MyConfig extends ChannelConfig {
-  /** WebHub Backend URL - 配置时设置 */
-  webhubUrl: string;
-  /** Channel ID */
-  channelId: string;
-  /** Access Token */
-  accessToken: string;
-}
-
-class MyChannel extends Channel<MyConfig> {
-  protected createConnectionAdapter(config: MyConfig) {
-    return new WebHubAdapter(config);
-  }
-}
-
-// 使用时配置 webhubUrl
-const channel = new MyChannel({
-  webhubUrl: 'http://localhost:3000',  // 从配置获取
-  channelId: 'wh_ch_xxx',
-  accessToken: 'wh_xxx',
+// Required: webhubUrl + accessToken (secret)
+const channel = new Channel({
+  webhubUrl: 'https://webhub.xiaolai.com',  // WebHub deployment URL
+  channelId: 'wh_ch_xxx',                    // Channel ID from admin panel
+  accessToken: 'secret_from_channel_page',   // Secret from admin panel
 });
+
+// Listen for messages
+channel.onMessage((message) => {
+  console.log('Received:', message);
+});
+
+// Connect
+await channel.connect();
+
+// Send message
+await channel.send({
+  target: { type: 'user', id: 'user-123' },
+  content: { text: 'Hello!' },
+});
+
+// Disconnect
+await channel.disconnect();
 ```
 
-## Configuration (Set in config.webhubUrl)
+## Configuration
 
-**URL 从配置中获取，不要写死：**
+### Required Parameters
 
 ```typescript
-// ✅ 正确：从配置获取
-const adapter = new WebHubAdapter({
-  webhubUrl: config.webhubUrl,  // 从 config.webhubUrl 获取
-  channelId: 'wh_ch_xxx',
-  accessToken: 'token_xxx',
-});
+interface ConnectionConfig {
+  /** WebHub Backend URL - required */
+  webhubUrl: string;
+  
+  /** Channel ID - required */
+  channelId: string;
+  
+  /** Channel secret/key - required */
+  accessToken: string;
+}
+```
 
-// ❌ 错误：不要写死 URL
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',  // 不要这样写
-  channelId: 'wh_ch_xxx',
-  accessToken: 'token_xxx',
-});
+### Optional Parameters
+
+```typescript
+interface ConnectionConfig {
+  // ... required parameters above
+  
+  // Optional
+  preferredMode?: 'websocket' | 'sse' | 'polling';
+  wsPath?: string;
+  ssePath?: string;
+  pollInterval?: number;
+  heartbeatInterval?: number;
+  maxReconnectAttempts?: number;
+}
+```
+
+## Architecture
+
+```
+Website SDK                    WebHub Backend
+     │                              │
+     │  1. register                 │
+     │ ──────────────────────────────→│
+     │  (channelId + secret)         │
+     │                              │
+     │  2. connect                   │
+     │ ──────────────────────────────→│
+     │                              │
+     │  3. send messages             │
+     │ ──────────────────────────────→│
+     │                              │
+     │  4. receive messages          │
+     │ ←─────────────────────────────│
+     │  (WebSocket / SSE / Polling)  │
 ```
 
 ## API Reference
 
-### WebHubAdapterConfig
+### WebHubAdapter
 
 ```typescript
 const adapter = new WebHubAdapter({
-  webhubUrl: 'http://localhost:3000',  // 从配置获取 URL
-  channelId: 'wh_ch_xxx',
-  accessToken: 'token_xxx',
+  webhubUrl: 'https://webhub.xiaolai.com',  // REQUIRED
+  channelId: 'wh_ch_xxx',                     // REQUIRED
+  accessToken: 'secret_xxx',                  // REQUIRED
   
-  // 可选配置
-  preferredMode: 'websocket',  // 首选模式
-  wsPath: '/ws',               // WebSocket 路径
-  ssePath: '/api/channel/events', // SSE 路径
-  pollInterval: 5000,           // 轮询间隔 (ms)
-  heartbeatInterval: 30000,      // 心跳间隔 (ms)
-  maxReconnectAttempts: 3,      // 最大重连次数
+  // Optional
+  preferredMode: 'websocket',
+  wsPath: '/ws',
+  ssePath: '/api/channel/events',
+  pollInterval: 5000,
+  heartbeatInterval: 30000,
+  maxReconnectAttempts: 3,
 });
 ```
 
@@ -89,12 +143,12 @@ adapter.mode;     // 'websocket' | 'sse' | 'polling'
 ### Methods
 
 ```typescript
-await adapter.connect();              // 连接 (自动选择最佳模式)
-await adapter.send(message);           // 发送消息
-await adapter.disconnect();            // 断开连接
-adapter.onMessage(callback);          // 订阅消息
-adapter.onStatusChange(callback);     // 订阅状态变化
-const stats = await adapter.getStats(); // 获取统计
+await adapter.connect();              // Connect (auto-selects best mode)
+await adapter.send(message);           // Send message
+await adapter.disconnect();            // Disconnect
+adapter.onMessage(callback);          // Subscribe to messages
+adapter.onStatusChange(callback);     // Subscribe to status changes
+const stats = await adapter.getStats(); // Get statistics
 ```
 
 ## Performance Degradation Flow
@@ -102,11 +156,11 @@ const stats = await adapter.getStats(); // 获取统计
 ```
 connect()
     ↓
-try WebSocket ✓ → connected (websocket mode) ← 最佳
+try WebSocket ✓ → connected (websocket mode) ← Best
     ↓ ✗
-try SSE ✓ → connected (sse mode) ← 中等
+try SSE ✓ → connected (sse mode) ← Good
     ↓ ✗
-fallback Polling → connected (polling mode) ← 基础
+fallback Polling → connected (polling mode) ← Basic
 ```
 
 ## Mode Detection
@@ -118,13 +172,13 @@ adapter.onStatusChange((status, error) => {
     
     switch (adapter.mode) {
       case 'websocket':
-        console.log('最佳性能!');
+        console.log('Best performance!');
         break;
       case 'sse':
-        console.log('良好性能，SSE 模式');
+        console.log('Good performance, SSE mode');
         break;
       case 'polling':
-        console.log('基础性能，轮询模式');
+        console.log('Basic performance, polling mode');
         break;
     }
   }
@@ -133,7 +187,7 @@ adapter.onStatusChange((status, error) => {
 
 ## WebHub Backend API
 
-The adapter calls these APIs (URL from config.webhubUrl):
+The adapter calls these APIs using `{webhubUrl}`:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -141,9 +195,9 @@ The adapter calls these APIs (URL from config.webhubUrl):
 | POST | `{webhubUrl}/api/channel/connect` | Connect to hub |
 | POST | `{webhubUrl}/api/channel/disconnect` | Disconnect |
 | POST | `{webhubUrl}/api/channel/messages` | Send message |
-| WS | `{webhubUrl}/ws` | WebSocket |
-| GET | `{webhubUrl}/api/channel/events` | SSE |
-| POST | `{webhubUrl}/api/channel/webhook` | Polling |
+| WS | `{webhubUrl}/ws` | WebSocket connection |
+| GET | `{webhubUrl}/api/channel/events` | SSE events |
+| POST | `{webhubUrl}/api/channel/webhook` | Poll for messages |
 | POST | `{webhubUrl}/api/channel/heartbeat` | Heartbeat |
 
 ## Related Documentation
