@@ -41,6 +41,7 @@ The Channel SDK provides TypeScript interfaces and base classes for building Ope
 - [Security](09-security.md)
 - [Testing](10-testing.md)
 - [Appendix](11-appendix.md)
+- [WebHub Adapter](12-webhub-adapter.md)
 
 ---
 

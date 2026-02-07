@@ -16,6 +16,7 @@ export * from './core/channel';
 // 导出适配器
 export * from './adapters/websocket';
 export * from './adapters/default';
+export * from './adapters/webhub';
 
 /******************************************************************
  * Channel SDK - Message Class (Placeholder)
