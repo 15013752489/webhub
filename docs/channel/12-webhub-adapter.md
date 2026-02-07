@@ -2,18 +2,6 @@
 
 How to use the WebHub Adapter with automatic performance degradation.
 
-## Overview
-
-The WebHub Adapter supports **graceful degradation** from high performance to low performance:
-
-| Mode | Performance | Latency | Use Case |
-|------|-------------|---------|-----------|
-| **WebSocket** | ⭐⭐⭐⭐⭐ Highest | Real-time | High-frequency messaging |
-| **SSE** | ⭐⭐⭐⭐ High | ~100ms | Receiving messages only |
-| **Polling** | ⭐ Lowest | 5s+ | Low-resource environments |
-
-The adapter automatically tries WebSocket first, falls back to SSE, then Polling.
-
 ## Quick Start
 
 ### 1. Install
@@ -22,68 +10,91 @@ The adapter automatically tries WebSocket first, falls back to SSE, then Polling
 npm install @openclaw/channel-sdk
 ```
 
-### 2. Basic Usage
+### 2. Configure Channel (Set webhubUrl in config)
 
 ```typescript
-import { WebHubAdapter, createWebHubFactory } from '@openclaw/channel-sdk/adapters/webhub';
+import { Channel, ChannelConfig } from '@openclaw/channel-sdk';
+import { WebHubAdapter } from '@openclaw/channel-sdk/adapters/webhub';
 
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',
+interface MyConfig extends ChannelConfig {
+  /** WebHub Backend URL - 配置时设置 */
+  webhubUrl: string;
+  /** Channel ID */
+  channelId: string;
+  /** Access Token */
+  accessToken: string;
+}
+
+class MyChannel extends Channel<MyConfig> {
+  protected createConnectionAdapter(config: MyConfig) {
+    return new WebHubAdapter(config);
+  }
+}
+
+// 使用时配置 webhubUrl
+const channel = new MyChannel({
+  webhubUrl: 'http://localhost:3000',  // 从配置获取
   channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
+  accessToken: 'wh_xxx',
 });
-
-// Listen for messages
-adapter.onMessage((message) => {
-  console.log('Received:', message);
-});
-
-// Listen for status changes
-adapter.onStatusChange((status, error) => {
-  console.log('Status:', status, 'Mode:', adapter.mode);
-});
-
-// Connect (auto selects best mode)
-await adapter.connect();
-
-// Send messages
-await adapter.send({
-  target: { type: 'user', id: 'user-123' },
-  content: { text: 'Hello!' },
-});
-
-// Get connection stats
-const stats = await adapter.getStats();
-console.log('Mode:', stats.mode);
-
-// Disconnect
-await adapter.disconnect();
 ```
 
-### 3. Using Factory with Custom Mode
+## Configuration (Set in config.webhubUrl)
+
+**URL 从配置中获取，不要写死：**
 
 ```typescript
-import { createWebHubFactory } from '@openclaw/channel-sdk/adapters/webhub';
-
-// Force specific mode or configure degradation
-const factory = createWebHubFactory('http://localhost:3000', {
-  preferred: 'websocket',  // Try WebSocket first
-  websocket: {
-    maxRetries: 3,
-    retryInterval: 1000,
-  },
-  sse: {
-    maxRetries: 2,
-  },
-  polling: {
-    interval: 5000,  // Poll every 5 seconds
-  },
-});
-
-const adapter = factory.createConnectionAdapter({
+// ✅ 正确：从配置获取
+const adapter = new WebHubAdapter({
+  webhubUrl: config.webhubUrl,  // 从 config.webhubUrl 获取
   channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
+  accessToken: 'token_xxx',
 });
+
+// ❌ 错误：不要写死 URL
+const adapter = new WebHubAdapter({
+  baseUrl: 'http://localhost:3000',  // 不要这样写
+  channelId: 'wh_ch_xxx',
+  accessToken: 'token_xxx',
+});
+```
+
+## API Reference
+
+### WebHubAdapterConfig
+
+```typescript
+const adapter = new WebHubAdapter({
+  webhubUrl: 'http://localhost:3000',  // 从配置获取 URL
+  channelId: 'wh_ch_xxx',
+  accessToken: 'token_xxx',
+  
+  // 可选配置
+  preferredMode: 'websocket',  // 首选模式
+  wsPath: '/ws',               // WebSocket 路径
+  ssePath: '/api/channel/events', // SSE 路径
+  pollInterval: 5000,           // 轮询间隔 (ms)
+  heartbeatInterval: 30000,      // 心跳间隔 (ms)
+  maxReconnectAttempts: 3,      // 最大重连次数
+});
+```
+
+### Properties
+
+```typescript
+adapter.status;  // 'connected' | 'disconnected' | 'error'
+adapter.mode;     // 'websocket' | 'sse' | 'polling'
+```
+
+### Methods
+
+```typescript
+await adapter.connect();              // 连接 (自动选择最佳模式)
+await adapter.send(message);           // 发送消息
+await adapter.disconnect();            // 断开连接
+adapter.onMessage(callback);          // 订阅消息
+adapter.onStatusChange(callback);     // 订阅状态变化
+const stats = await adapter.getStats(); // 获取统计
 ```
 
 ## Performance Degradation Flow
@@ -91,101 +102,14 @@ const adapter = factory.createConnectionAdapter({
 ```
 connect()
     ↓
-try WebSocket ✓ → connected (websocket mode)
+try WebSocket ✓ → connected (websocket mode) ← 最佳
     ↓ ✗
-try SSE ✓ → connected (sse mode)
+try SSE ✓ → connected (sse mode) ← 中等
     ↓ ✗
-fallback Polling → connected (polling mode)
-```
-
-## API Reference
-
-### WebHubAdapter
-
-```typescript
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',
-  channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
-  preferredMode: 'websocket',  // Force preferred mode
-  wsPath: '/ws',                // Custom WebSocket path
-  ssePath: '/api/channel/events', // Custom SSE path
-  pollInterval: 5000,           // Polling interval (ms)
-  heartbeatInterval: 30000,      // Heartbeat interval (ms)
-  maxReconnectAttempts: 3,      // Max reconnection attempts
-});
-
-// Properties
-adapter.status;   // 'connected' | 'disconnected' | 'error'
-adapter.mode;      // 'websocket' | 'sse' | 'polling'
-
-// Methods
-await adapter.connect();
-await adapter.send(message);
-await adapter.disconnect();
-adapter.onMessage(callback);
-adapter.onStatusChange(callback);
-const stats = await adapter.getStats();
-```
-
-### PerformanceModeConfig
-
-```typescript
-const config: PerformanceModeConfig = {
-  preferred: 'websocket',  // Try WebSocket first
-  
-  websocket: {
-    maxRetries: 3,        // Max WebSocket retry attempts
-    retryInterval: 1000,   // Retry interval (ms)
-  },
-  
-  sse: {
-    maxRetries: 2,        // Max SSE retry attempts
-  },
-  
-  polling: {
-    interval: 5000,       // Poll interval (ms)
-  },
-};
-```
-
-## Message Flow by Mode
-
-### WebSocket Mode (Real-time Bidirectional)
-
-```
-Website ↔ WebSocket ↔ WebHub Backend ↔ OpenClaw
-
-- Bidirectional real-time communication
-- Lowest latency (~10ms)
-- Single connection for send/receive
-```
-
-### SSE Mode (HTTP Push + HTTP Send)
-
-```
-Website → HTTP POST → WebHub Backend ↔ OpenClaw
-Website ← SSE ← WebHub Backend
-
-- Server-Sent Events for receiving
-- HTTP POST for sending
-- Good for receiving-only scenarios
-```
-
-### Polling Mode (HTTP Only)
-
-```
-Website → HTTP POST → WebHub Backend ↔ OpenClaw
-Website ← HTTP GET ← WebHub Backend
-
-- Simple HTTP requests
-- Higher latency (poll interval)
-- Works in restrictive environments
+fallback Polling → connected (polling mode) ← 基础
 ```
 
 ## Mode Detection
-
-You can detect and respond to mode changes:
 
 ```typescript
 adapter.onStatusChange((status, error) => {
@@ -194,99 +118,33 @@ adapter.onStatusChange((status, error) => {
     
     switch (adapter.mode) {
       case 'websocket':
-        console.log('Best performance!');
+        console.log('最佳性能!');
         break;
       case 'sse':
-        console.log('Good performance, SSE mode');
+        console.log('良好性能，SSE 模式');
         break;
       case 'polling':
-        console.log('Low performance, polling mode');
-        console.log('Consider enabling WebSocket support');
+        console.log('基础性能，轮询模式');
         break;
     }
   }
-});
-```
-
-## Error Handling
-
-```typescript
-try {
-  await adapter.connect();
-} catch (error) {
-  console.error('Connection failed:', error);
-}
-
-// Reconnection with mode detection
-adapter.onStatusChange((status, error) => {
-  if (status === 'disconnected') {
-    // Auto-reconnect will be attempted
-    console.log('Disconnected, mode:', adapter.mode);
-    
-    if (adapter.mode === 'polling') {
-      console.log('Consider checking WebSocket support');
-    }
-  }
-});
-```
-
-## Configuration Examples
-
-### High Performance (Prefer WebSocket)
-
-```typescript
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',
-  channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
-  preferredMode: 'websocket',
-  heartbeatInterval: 30000,
-  maxReconnectAttempts: 5,
-});
-```
-
-### Balanced (Allow All Modes)
-
-```typescript
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',
-  channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
-  preferredMode: 'websocket',
-  heartbeatInterval: 30000,
-  pollInterval: 5000,
-});
-```
-
-### Low Resource (Force Polling)
-
-```typescript
-const adapter = new WebHubAdapter({
-  baseUrl: 'http://localhost:3000',
-  channelId: 'wh_ch_xxx',
-  secret: 'wh_secret_xxx',
-  preferredMode: 'polling',  // Force polling
-  heartbeatInterval: 60000, // Longer heartbeat
-  pollInterval: 10000,      // Slower polling
 });
 ```
 
 ## WebHub Backend API
 
-The adapter calls these WebHub Backend APIs:
+The adapter calls these APIs (URL from config.webhubUrl):
 
-| Method | Endpoint | Used By | Description |
-|--------|----------|---------|-------------|
-| POST | `/api/channel/register` | All | Register channel |
-| POST | `/api/channel/connect` | All | Connect to hub |
-| POST | `/api/channel/disconnect` | All | Disconnect |
-| POST | `/api/channel/messages` | All | Send message |
-| GET | `/api/channel/events` | SSE | Subscribe to events |
-| WS | `/ws` | WebSocket | Real-time connection |
-| POST | `/api/channel/webhook` | Polling | Poll for messages |
-| POST | `/api/channel/heartbeat` | All | Send heartbeat |
-
-See [Channel API Docs](https://github.com/chatu-ai/chatu-web-hub-service/docs/api/channel-api.en.md) for details.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `{webhubUrl}/api/channel/register` | Register channel |
+| POST | `{webhubUrl}/api/channel/connect` | Connect to hub |
+| POST | `{webhubUrl}/api/channel/disconnect` | Disconnect |
+| POST | `{webhubUrl}/api/channel/messages` | Send message |
+| WS | `{webhubUrl}/ws` | WebSocket |
+| GET | `{webhubUrl}/api/channel/events` | SSE |
+| POST | `{webhubUrl}/api/channel/webhook` | Polling |
+| POST | `{webhubUrl}/api/channel/heartbeat` | Heartbeat |
 
 ## Related Documentation
 

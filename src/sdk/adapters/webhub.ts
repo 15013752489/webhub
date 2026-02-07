@@ -6,7 +6,7 @@
  * 2. Server-Sent Events (SSE) - 单向推送
  * 3. HTTP Polling (最低性能) - 简单轮询
  * 
- * API 文档: https://github.com/chatu-ai/chatu-web-hub-service/docs/api/channel-api.en.md
+ * URL 从 config.webhubUrl 配置中获取
  * 
  * @see https://github.com/chatu-ai/openclaw-web-hub-channel
  ******************************************************************/
@@ -33,23 +33,15 @@ import { v4 as uuidv4 } from 'uuid';
 export type PerformanceMode = 'websocket' | 'sse' | 'polling';
 
 /**
- * WebHub 适配器配置
+ * WebHub 适配器配置 (继承 ConnectionConfig)
  */
 export interface WebHubAdapterConfig extends ConnectionConfig {
-  /** WebHub Backend URL */
-  baseUrl: string;
-  /** Channel ID */
-  channelId: string;
-  /** Channel Secret */
-  secret: string;
-  /** Access Token (从 register 获取) */
-  accessToken?: string;
   /** 首选性能模式 (默认: websocket) */
   preferredMode?: PerformanceMode;
   /** SSE URL 路径 */
   ssePath?: string;
-  /** WebSocket URL 路径 */
-  wsPath?: string;
+  /** 轮询间隔 (毫秒) */
+  pollInterval?: number;
 }
 
 /**
@@ -72,17 +64,18 @@ interface WebHubResponse<T> {
  * - SSE: 单向推送 + HTTP 发送
  * - Polling: HTTP 轮询
  * 
+ * URL 从 config.webhubUrl 配置中获取
+ * 
  * @example
  * ```typescript
- * const adapter = new WebHubAdapter({
- *   baseUrl: 'http://localhost:3000',
- *   channelId: 'wh_ch_xxx',
- *   secret: 'wh_secret_xxx',
+ * // 配置时设置 webhubUrl
+ * const channel = new Channel({
+ *   config: {
+ *     channelId: 'wh_ch_xxx',
+ *     accessToken: 'token_xxx',
+ *     webhubUrl: 'http://localhost:3000',  // 从配置获取
+ *   }
  * });
- * 
- * adapter.connect();
- * adapter.onMessage((msg) => console.log(msg));
- * adapter.send({ text: 'Hello!' });
  * ```
  */
 export class WebHubAdapter implements ConnectionAdapter {
@@ -94,6 +87,11 @@ export class WebHubAdapter implements ConnectionAdapter {
   
   /** 实际使用的性能模式 */
   private currentMode: PerformanceMode = 'polling';
+  
+  /** WebHub URL (从配置获取) */
+  private get webhubUrl(): string {
+    return this.config.webhubUrl || 'http://localhost:3000';
+  }
   
   /** 消息回调 [Channel SDK 标准] */
   private messageCallbacks: Set<MessageCallback> = new Set();
@@ -127,9 +125,6 @@ export class WebHubAdapter implements ConnectionAdapter {
     lastActiveAt: Date.now(),
   };
   
-  /** 轮询间隔 (毫秒) */
-  private pollInterval: number = 5000;
-  
   /**
    * 创建 WebHub 适配器
    */
@@ -144,11 +139,6 @@ export class WebHubAdapter implements ConnectionAdapter {
       pollInterval: 5000,
       ...config,
     };
-    
-    // 规范化 baseUrl
-    if (!this.config.baseUrl.endsWith('/')) {
-      this.config.baseUrl += '/';
-    }
   }
   
   /**
@@ -167,11 +157,6 @@ export class WebHubAdapter implements ConnectionAdapter {
   
   /**
    * 连接到 WebHub [Channel SDK 标准]
-   * 
-   * 优雅退化流程:
-   * 1. 尝试 WebSocket (首选)
-   * 2. 如果失败，尝试 SSE
-   * 3. 如果都失败，使用 Polling
    */
   async connect(): Promise<void> {
     try {
@@ -224,12 +209,21 @@ export class WebHubAdapter implements ConnectionAdapter {
   }
   
   /**
+   * 获取完整的 WebHub URL
+   */
+  private getUrl(path: string): string {
+    const baseUrl = this.webhubUrl.replace(/\/$/, '');
+    const urlPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseUrl}${urlPath}`;
+  }
+  
+  /**
    * 尝试 WebSocket 连接
    */
   private async tryWebSocket(): Promise<boolean> {
-    const wsUrl = new URL(this.config.wsPath || '/ws', this.config.baseUrl);
+    const wsUrl = new URL(this.getUrl(this.config.wsPath || '/ws'));
     wsUrl.searchParams.set('channelId', this.config.channelId);
-    wsUrl.searchParams.set('token', this.config.accessToken || this.config.secret);
+    wsUrl.searchParams.set('token', this.config.accessToken || this.config.accessToken);
     
     return new Promise((resolve) => {
       try {
@@ -281,9 +275,9 @@ export class WebHubAdapter implements ConnectionAdapter {
    * 尝试 SSE 连接
    */
   private async trySSE(): Promise<boolean> {
-    const sseUrl = new URL(this.config.ssePath || '/api/channel/events', this.config.baseUrl);
+    const sseUrl = new URL(this.getUrl(this.config.ssePath || '/api/channel/events'));
     sseUrl.searchParams.set('channelId', this.config.channelId);
-    sseUrl.searchParams.set('token', this.config.accessToken || this.config.secret);
+    sseUrl.searchParams.set('token', this.config.accessToken || this.config.accessToken);
     
     return new Promise((resolve) => {
       try {
@@ -349,7 +343,7 @@ export class WebHubAdapter implements ConnectionAdapter {
   private async register(): Promise<void> {
     const response = await this.request<{ accessToken: string }>('/api/channel/register', {
       channelId: this.config.channelId,
-      secret: this.config.secret,
+      secret: this.config.accessToken,
     });
     
     if (response.success && response.data?.accessToken) {
@@ -377,13 +371,11 @@ export class WebHubAdapter implements ConnectionAdapter {
    */
   async disconnect(): Promise<void> {
     try {
-      // 停止所有连接
       this.stopPolling();
       this.stopHeartbeat();
       this.cleanupWebSocket();
       this.cleanupSSE();
       
-      // 通知 Hub 断开
       if (this.config.accessToken) {
         await this.request('/api/channel/disconnect', {
           channelId: this.config.channelId,
@@ -411,7 +403,7 @@ export class WebHubAdapter implements ConnectionAdapter {
           target: message.target,
           content: {
             text: message.content.text,
-            type: message.content.type || 'text',
+            type: message.content.format || 'text',
           },
           metadata: message.metadata,
         },
@@ -476,15 +468,11 @@ export class WebHubAdapter implements ConnectionAdapter {
       'Content-Type': 'application/json',
     };
     
-    if (requireAuth) {
-      if (this.config.accessToken) {
-        headers['X-Access-Token'] = this.config.accessToken;
-      } else if (this.config.secret) {
-        headers['X-Channel-Token'] = this.config.secret;
-      }
+    if (requireAuth && this.config.accessToken) {
+      headers['X-Access-Token'] = this.config.accessToken;
     }
     
-    const response = await fetch(`${this.config.baseUrl}${path}`, {
+    const response = await fetch(this.getUrl(path), {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -515,7 +503,7 @@ export class WebHubAdapter implements ConnectionAdapter {
       } catch (error) {
         console.error('Polling error:', error);
       }
-    }, this.pollInterval);
+    }, this.config.pollInterval || 5000);
   }
   
   /**
@@ -537,7 +525,7 @@ export class WebHubAdapter implements ConnectionAdapter {
       this.request('/api/channel/heartbeat', {
         channelId: this.config.channelId,
       }, true).catch(() => {});
-    }, this.config.heartbeatInterval);
+    }, this.config.heartbeatInterval || 30000);
   }
   
   /**
@@ -594,16 +582,10 @@ export interface PerformanceModeConfig {
  * WebHub 适配器工厂
  */
 export class WebHubAdapterFactory implements AdapterFactory {
-  /** WebHub Backend URL */
-  private baseUrl: string;
   /** 性能模式配置 */
   private modeConfig: PerformanceModeConfig;
   
-  constructor(
-    baseUrl: string = 'http://localhost:3000',
-    modeConfig?: PerformanceModeConfig
-  ) {
-    this.baseUrl = baseUrl;
+  constructor(modeConfig?: PerformanceModeConfig) {
     this.modeConfig = modeConfig || {
       preferred: 'websocket',
       websocket: { maxRetries: 3, retryInterval: 1000 },
@@ -613,15 +595,10 @@ export class WebHubAdapterFactory implements AdapterFactory {
   }
   
   /**
-   * 创建 WebHub 适配器
+   * 创建 WebHub 适配器 (从 config.webhubUrl 获取 URL)
    */
   createConnectionAdapter(config: ConnectionConfig): ConnectionAdapter {
-    const webhubConfig = config as WebHubAdapterConfig;
-    return new WebHubAdapter({
-      ...webhubConfig,
-      baseUrl: this.baseUrl,
-      preferredMode: this.modeConfig.preferred,
-    });
+    return new WebHubAdapter(config as WebHubAdapterConfig);
   }
   
   /**
@@ -691,9 +668,6 @@ export class WebHubAdapterFactory implements AdapterFactory {
 /**
  * 创建 WebHub 适配器工厂
  */
-export function createWebHubFactory(
-  baseUrl?: string,
-  modeConfig?: PerformanceModeConfig
-): WebHubAdapterFactory {
-  return new WebHubAdapterFactory(baseUrl, modeConfig);
+export function createWebHubFactory(modeConfig?: PerformanceModeConfig): WebHubAdapterFactory {
+  return new WebHubAdapterFactory(modeConfig);
 }

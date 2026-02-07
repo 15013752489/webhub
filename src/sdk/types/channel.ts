@@ -208,6 +208,9 @@ export interface ConnectionConfig {
   /** 访问令牌 [Channel SDK 标准] */
   accessToken: string;
   
+  /** WebHub Backend URL (配置时设置) */
+  webhubUrl?: string;
+  
   /** Webhook URL [Channel SDK 标准] */
   webhookUrl?: string;
   
