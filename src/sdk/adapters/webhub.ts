@@ -1,7 +1,10 @@
 /******************************************************************
- * Channel SDK - WebHub HTTP Adapter
+ * Channel SDK - WebHub Adapter with Performance Degradation
  * 
- * 用于调用 WebHub Backend API 的 HTTP 适配器
+ * 支持从高性能到低性能的优雅退化:
+ * 1. WebSocket (最高性能) - 实时双向通信
+ * 2. Server-Sent Events (SSE) - 单向推送
+ * 3. HTTP Polling (最低性能) - 简单轮询
  * 
  * API 文档: https://github.com/chatu-ai/chatu-web-hub-service/docs/api/channel-api.en.md
  * 
@@ -25,7 +28,32 @@ import type {
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * WebHub API 响应格式
+ * 性能模式
+ */
+export type PerformanceMode = 'websocket' | 'sse' | 'polling';
+
+/**
+ * WebHub 适配器配置
+ */
+export interface WebHubAdapterConfig extends ConnectionConfig {
+  /** WebHub Backend URL */
+  baseUrl: string;
+  /** Channel ID */
+  channelId: string;
+  /** Channel Secret */
+  secret: string;
+  /** Access Token (从 register 获取) */
+  accessToken?: string;
+  /** 首选性能模式 (默认: websocket) */
+  preferredMode?: PerformanceMode;
+  /** SSE URL 路径 */
+  ssePath?: string;
+  /** WebSocket URL 路径 */
+  wsPath?: string;
+}
+
+/**
+ * WebHub 响应格式
  */
 interface WebHubResponse<T> {
   success: boolean;
@@ -37,48 +65,19 @@ interface WebHubResponse<T> {
 }
 
 /**
- * WebHub API 请求格式
- */
-interface WebHubRequest {
-  channelId: string;
-  messageId?: string;
-  target?: {
-    type: string;
-    id: string;
-  };
-  content?: {
-    text: string;
-    type?: string;
-  };
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * WebHub HTTP 适配器配置
- */
-export interface WebHubHttpConfig extends ConnectionConfig {
-  /** WebHub Backend URL */
-  baseUrl: string;
-  /** Channel ID */
-  channelId: string;
-  /** Channel Secret */
-  secret: string;
-  /** Access Token (从 register 获取) */
-  accessToken?: string;
-}
-
-/**
- * WebHub HTTP 适配器
+ * WebHub 适配器
  * 
- * 用于调用 WebHub Backend 的 /api/channel/* 接口
+ * 支持三种模式的优雅退化:
+ * - WebSocket: 实时双向通信
+ * - SSE: 单向推送 + HTTP 发送
+ * - Polling: HTTP 轮询
  * 
  * @example
  * ```typescript
- * const adapter = new WebHubHttpAdapter({
+ * const adapter = new WebHubAdapter({
  *   baseUrl: 'http://localhost:3000',
  *   channelId: 'wh_ch_xxx',
  *   secret: 'wh_secret_xxx',
- *   accessToken: 'wh_xxx',
  * });
  * 
  * adapter.connect();
@@ -86,12 +85,15 @@ export interface WebHubHttpConfig extends ConnectionConfig {
  * adapter.send({ text: 'Hello!' });
  * ```
  */
-export class WebHubHttpAdapter implements ConnectionAdapter {
+export class WebHubAdapter implements ConnectionAdapter {
   /** 配置 [Channel SDK 标准] */
-  public config: WebHubHttpConfig;
+  public config: WebHubAdapterConfig;
   
   /** 当前状态 [Channel SDK 标准] */
   private _status: ConnectionStatus = 'disconnected';
+  
+  /** 实际使用的性能模式 */
+  private currentMode: PerformanceMode = 'polling';
   
   /** 消息回调 [Channel SDK 标准] */
   private messageCallbacks: Set<MessageCallback> = new Set();
@@ -111,6 +113,12 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
   /** 轮询定时器 */
   private pollTimer: NodeJS.Timer | null = null;
   
+  /** SSE EventSource */
+  private eventSource: EventSource | null = null;
+  
+  /** WebSocket 实例 */
+  private ws: WebSocket | null = null;
+  
   /** 统计 [Channel SDK 标准] */
   private stats: ChannelStats = {
     messagesSent: 0,
@@ -123,17 +131,21 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
   private pollInterval: number = 5000;
   
   /**
-   * 创建 WebHub HTTP 适配器
+   * 创建 WebHub 适配器
    */
-  constructor(config: WebHubHttpConfig) {
+  constructor(config: WebHubAdapterConfig) {
     this.config = {
       heartbeatInterval: 30000,
       heartbeatTimeout: 10000,
       maxReconnectAttempts: 3,
+      preferredMode: 'websocket',
+      ssePath: '/api/channel/events',
+      wsPath: '/ws',
+      pollInterval: 5000,
       ...config,
     };
     
-    // 如果没有尾随斜杠，添加
+    // 规范化 baseUrl
     if (!this.config.baseUrl.endsWith('/')) {
       this.config.baseUrl += '/';
     }
@@ -147,7 +159,19 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
   }
   
   /**
+   * 获取实际使用的性能模式
+   */
+  get mode(): PerformanceMode {
+    return this.currentMode;
+  }
+  
+  /**
    * 连接到 WebHub [Channel SDK 标准]
+   * 
+   * 优雅退化流程:
+   * 1. 尝试 WebSocket (首选)
+   * 2. 如果失败，尝试 SSE
+   * 3. 如果都失败，使用 Polling
    */
   async connect(): Promise<void> {
     try {
@@ -159,7 +183,31 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
       // 2. 连接
       await this.connectToHub();
       
-      // 3. 启动轮询接收消息
+      // 3. 尝试高性能连接 (按优先级)
+      let connected = false;
+      
+      // 3.1 尝试 WebSocket
+      if (this.config.preferredMode === 'websocket' || this.config.preferredMode === 'websocket') {
+        connected = await this.tryWebSocket();
+        if (connected) {
+          this.currentMode = 'websocket';
+          this.notifyStatus('connected');
+          return;
+        }
+      }
+      
+      // 3.2 尝试 SSE
+      if (this.config.preferredMode === 'websocket' || this.config.preferredMode === 'sse') {
+        connected = await this.trySSE();
+        if (connected) {
+          this.currentMode = 'sse';
+          this.notifyStatus('connected');
+          return;
+        }
+      }
+      
+      // 3.3 降级到 Polling
+      this.currentMode = 'polling';
       this.startPolling();
       
       // 4. 启动心跳
@@ -172,6 +220,126 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
     } catch (error) {
       this._status = 'disconnected';
       throw error;
+    }
+  }
+  
+  /**
+   * 尝试 WebSocket 连接
+   */
+  private async tryWebSocket(): Promise<boolean> {
+    const wsUrl = new URL(this.config.wsPath || '/ws', this.config.baseUrl);
+    wsUrl.searchParams.set('channelId', this.config.channelId);
+    wsUrl.searchParams.set('token', this.config.accessToken || this.config.secret);
+    
+    return new Promise((resolve) => {
+      try {
+        this.ws = new WebSocket(wsUrl.toString());
+        
+        const timeout = setTimeout(() => {
+          this.cleanupWebSocket();
+          resolve(false);
+        }, 5000);
+        
+        this.ws.onopen = () => {
+          clearTimeout(timeout);
+          this.stats.connectedDuration = Date.now();
+          this.startHeartbeat();
+          resolve(true);
+        };
+        
+        this.ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            if (message.type === 'message') {
+              this.stats.messagesReceived++;
+              this.notifyMessage(message.data || message);
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        };
+        
+        this.ws.onclose = () => {
+          clearTimeout(timeout);
+          this.cleanupWebSocket();
+          resolve(false);
+        };
+        
+        this.ws.onerror = () => {
+          clearTimeout(timeout);
+          this.cleanupWebSocket();
+          resolve(false);
+        };
+        
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+  
+  /**
+   * 尝试 SSE 连接
+   */
+  private async trySSE(): Promise<boolean> {
+    const sseUrl = new URL(this.config.ssePath || '/api/channel/events', this.config.baseUrl);
+    sseUrl.searchParams.set('channelId', this.config.channelId);
+    sseUrl.searchParams.set('token', this.config.accessToken || this.config.secret);
+    
+    return new Promise((resolve) => {
+      try {
+        this.eventSource = new EventSource(sseUrl.toString());
+        
+        const timeout = setTimeout(() => {
+          this.cleanupSSE();
+          resolve(false);
+        }, 5000);
+        
+        this.eventSource.onopen = () => {
+          clearTimeout(timeout);
+          this.stats.connectedDuration = Date.now();
+          this.startHeartbeat();
+          resolve(true);
+        };
+        
+        this.eventSource.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+            this.stats.messagesReceived++;
+            this.notifyMessage(message);
+          } catch (e) {
+            // 忽略解析错误
+          }
+        };
+        
+        this.eventSource.onerror = () => {
+          clearTimeout(timeout);
+          this.cleanupSSE();
+          resolve(false);
+        };
+        
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+  
+  /**
+   * 清理 WebSocket
+   */
+  private cleanupWebSocket(): void {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+  
+  /**
+   * 清理 SSE
+   */
+  private cleanupSSE(): void {
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
     }
   }
   
@@ -209,9 +377,11 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
    */
   async disconnect(): Promise<void> {
     try {
-      // 停止轮询和心跳
+      // 停止所有连接
       this.stopPolling();
       this.stopHeartbeat();
+      this.cleanupWebSocket();
+      this.cleanupSSE();
       
       // 通知 Hub 断开
       if (this.config.accessToken) {
@@ -288,7 +458,10 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
    * 获取统计 [Channel SDK 标准]
    */
   async getStats(): Promise<ChannelStats> {
-    return { ...this.stats };
+    return {
+      ...this.stats,
+      mode: this.currentMode,
+    };
   }
   
   /**
@@ -303,7 +476,6 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
       'Content-Type': 'application/json',
     };
     
-    // 如果需要认证，使用 accessToken 或 secret
     if (requireAuth) {
       if (this.config.accessToken) {
         headers['X-Access-Token'] = this.config.accessToken;
@@ -327,19 +499,16 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
   private startPolling(): void {
     this.pollTimer = setInterval(async () => {
       try {
-        // 调用 webhook 端点获取消息
         const response = await this.request<InboundMessage[]>('/api/channel/webhook', {
           channelId: this.config.channelId,
         }, true);
         
         if (response.success && response.data) {
           const messages = Array.isArray(response.data) ? response.data : [response.data];
-          
           for (const message of messages) {
             this.stats.messagesReceived++;
             this.notifyMessage(message);
           }
-          
           this.stats.lastActiveAt = Date.now();
         }
         
@@ -365,12 +534,9 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       this.lastHeartbeat = Date.now();
-      
-      // 发送心跳到 hub
       this.request('/api/channel/heartbeat', {
         channelId: this.config.channelId,
       }, true).catch(() => {});
-      
     }, this.config.heartbeatInterval);
   }
   
@@ -400,24 +566,61 @@ export class WebHubHttpAdapter implements ConnectionAdapter {
 }
 
 /**
- * WebHub HTTP 适配器工厂
+ * 性能模式配置
+ */
+export interface PerformanceModeConfig {
+  /** 首选模式 */
+  preferred: PerformanceMode;
+  /** WebSocket 配置 */
+  websocket?: {
+    /** 重试次数 */
+    maxRetries?: number;
+    /** 重试间隔 (毫秒) */
+    retryInterval?: number;
+  };
+  /** SSE 配置 */
+  sse?: {
+    /** 重试次数 */
+    maxRetries?: number;
+  };
+  /** Polling 配置 */
+  polling?: {
+    /** 轮询间隔 (毫秒) */
+    interval?: number;
+  };
+}
+
+/**
+ * WebHub 适配器工厂
  */
 export class WebHubAdapterFactory implements AdapterFactory {
   /** WebHub Backend URL */
   private baseUrl: string;
+  /** 性能模式配置 */
+  private modeConfig: PerformanceModeConfig;
   
-  constructor(baseUrl: string = 'http://localhost:3000') {
+  constructor(
+    baseUrl: string = 'http://localhost:3000',
+    modeConfig?: PerformanceModeConfig
+  ) {
     this.baseUrl = baseUrl;
+    this.modeConfig = modeConfig || {
+      preferred: 'websocket',
+      websocket: { maxRetries: 3, retryInterval: 1000 },
+      sse: { maxRetries: 2 },
+      polling: { interval: 5000 },
+    };
   }
   
   /**
-   * 创建 WebHub HTTP 连接适配器
+   * 创建 WebHub 适配器
    */
   createConnectionAdapter(config: ConnectionConfig): ConnectionAdapter {
-    const webhubConfig = config as WebHubHttpConfig;
-    return new WebHubHttpAdapter({
+    const webhubConfig = config as WebHubAdapterConfig;
+    return new WebHubAdapter({
       ...webhubConfig,
       baseUrl: this.baseUrl,
+      preferredMode: this.modeConfig.preferred,
     });
   }
   
@@ -488,6 +691,9 @@ export class WebHubAdapterFactory implements AdapterFactory {
 /**
  * 创建 WebHub 适配器工厂
  */
-export function createWebHubFactory(baseUrl?: string): WebHubAdapterFactory {
-  return new WebHubAdapterFactory(baseUrl);
+export function createWebHubFactory(
+  baseUrl?: string,
+  modeConfig?: PerformanceModeConfig
+): WebHubAdapterFactory {
+  return new WebHubAdapterFactory(baseUrl, modeConfig);
 }
