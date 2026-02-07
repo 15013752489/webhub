@@ -104,7 +104,9 @@ export class WebSocketAdapter implements ConnectionAdapter {
    */
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = new URL(this.config.webhookUrl || 'wss://example.com/ws');
+      // 使用 webhubUrl 构建 WebSocket URL
+      const webhubUrl = this.config.webhubUrl || 'wss://example.com/ws';
+      const url = new URL(webhubUrl);
       url.searchParams.set('channelId', this.config.channelId);
       url.searchParams.set('token', this.config.accessToken);
       
