@@ -1,6 +1,6 @@
 # Channel Documentation
 
-This folder contains documentation for the OpenClaw WebHub Channel plugin.
+This folder contains documentation for the OpenClaw Channel SDK plugin.
 
 ## Structure
 
@@ -18,26 +18,14 @@ docs/
 │   ├── 07-message-flows.md
 │   ├── 08-error-handling.md
 │   ├── 09-security.md
-│   ├── 10-implementation.md
-│   ├── 11-testing.md
-│   ├── 12-appendix.md
-│   └── images/
-│       ├── diagram-01.png ~ diagram-08.png
-│       ├── diagram-sdk-inbound-flow.png
-│       ├── diagram-sdk-outbound-flow.png
-│       ├── diagram-type-layers.png
-│       ├── diagram-type-inheritance.png
-│       └── diagram-type-flow.png
-└── webhub/           # Website/WebHub design docs (TBD)
+│   ├── 10-testing.md
+│   └── 11-appendix.md
+└── sdk/              # SDK design discussions
 ```
 
 ## Overview
 
-The WebHub Channel plugin enables OpenClaw to connect to any Website that implements the WebHub REST API specification.
-
-- **Website Layer**: JSON formats that the Website must implement
-- **WebHub SDK**: Adapter types for the channel plugin
-- **Channel SDK**: OpenClaw SDK standard interfaces
+The Channel SDK provides TypeScript interfaces and base classes for building OpenClaw channel plugins with HTTP/WebSocket support.
 
 ## Quick Links
 
@@ -51,10 +39,9 @@ The WebHub Channel plugin enables OpenClaw to connect to any Website that implem
 - [Message Flows](07-message-flows.md)
 - [Error Handling](08-error-handling.md)
 - [Security](09-security.md)
-- [Implementation Plan](10-implementation.md)
-- [Testing](11-testing.md)
-- [Appendix](12-appendix.md)
+- [Testing](10-testing.md)
+- [Appendix](11-appendix.md)
 
 ---
 
-*Last updated: 2026-02-06*
+*Last updated: 2026-02-07*
