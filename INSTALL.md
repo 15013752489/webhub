@@ -66,11 +66,11 @@ openclaw extensions install @openclaw/webhub
 # Enable the channel
 openclaw config set channels.webhub.enabled true
 
-# Set WebHub service URL (provided by your Website)
-openclaw config set channels.webhub.webhookUrl "https://your-website.com/webhub"
+# Set WebHub Backend API URL
+openclaw config set channels.webhub.apiUrl "https://webhub.example.com"
 
-# Set access token (provided by your Website)
-openclaw config set channels.webhub.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
+# Set access token
+openclaw config set channels.webhub.accessToken "your-access-token"
 ```
 
 ### 2.2 Full Configuration
@@ -79,38 +79,70 @@ openclaw config set channels.webhub.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 {
   channels: {
     webhub: {
+      // Enable/disable the channel [Optional, default: true]
       enabled: true,
       
-      // WebHub service URL [Required]
-      webhookUrl: "https://your-website.com/webhub",
+      // WebHub Backend API URL [Required]
+      apiUrl: "https://webhub.example.com",
       
       // Access token [Required]
-      accessToken: "wh_eyJhbGciOiJIUzI1NiIs...",
+      accessToken: "your-access-token",
       
-      // Request timeout (ms) [Optional]
+      // Request timeout in milliseconds [Optional, default: 30000]
       timeout: 30000,
       
-      // Retry settings [Optional]
-      retry: {
-        maxAttempts: 3,
-        backoffMs: 1000
-      },
+      // Heartbeat interval for WebSocket connections in milliseconds [Optional, default: 30000]
+      heartbeatInterval: 30000,
       
-      // Message settings [Optional]
-      message: {
-        maxLength: 10000,
-        allowedFormats: ["plain", "markdown"]
-      },
+      // Maximum number of reconnection attempts [Optional, default: 3]
+      maxReconnectAttempts: 3,
       
-      // Security settings [Optional]
-      security: {
-        signatureKey: "your-webhook-secret",
-        signatureAlgorithm: "sha256"
+      // Multiple account configurations [Optional]
+      accounts: {
+        "production": {
+          accountId: "production",
+          apiUrl: "https://webhub-prod.example.com",
+          accessToken: "prod-access-token",
+          heartbeatInterval: 60000,
+          maxReconnectAttempts: 5
+        },
+        "staging": {
+          accountId: "staging",
+          apiUrl: "https://webhub-staging.example.com",
+          accessToken: "staging-access-token"
+          // Uses global heartbeatInterval and maxReconnectAttempts if not specified
+        }
       }
     }
   }
 }
 ```
+
+### 2.3 Configuration Reference
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `enabled` | boolean | No | `true` | Enable or disable the WebHub channel |
+| `apiUrl` | string (URI) | Yes* | - | WebHub Backend API URL |
+| `accessToken` | string | Yes* | - | Access token for authentication |
+| `timeout` | number | No | `30000` | Request timeout in milliseconds |
+| `heartbeatInterval` | number | No | `30000` | Heartbeat interval for WebSocket connections (ms) |
+| `maxReconnectAttempts` | number | No | `3` | Maximum number of reconnection attempts |
+| `accounts` | object | No | - | Multiple account configurations |
+
+\* Required at global level or per-account level
+
+#### Account Configuration
+
+Each account in the `accounts` object can override global settings:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `accountId` | string | Yes | Unique identifier for this account |
+| `apiUrl` | string (URI) | No | Account-specific API URL (overrides global) |
+| `accessToken` | string | No | Account-specific access token (overrides global) |
+| `heartbeatInterval` | number | No | Account-specific heartbeat interval (overrides global) |
+| `maxReconnectAttempts` | number | No | Account-specific reconnection attempts (overrides global) |
 
 ### 2.3 Environment Variables
 

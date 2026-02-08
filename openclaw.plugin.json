@@ -13,14 +13,63 @@
     "properties": {
       "enabled": {
         "type": "boolean",
-        "default": true
+        "default": true,
+        "description": "Enable or disable the WebHub channel"
       },
       "apiUrl": {
         "type": "string",
-        "format": "uri"
+        "format": "uri",
+        "description": "WebHub Backend API URL"
       },
       "accessToken": {
-        "type": "string"
+        "type": "string",
+        "description": "Access token for WebHub Backend authentication"
+      },
+      "timeout": {
+        "type": "number",
+        "default": 30000,
+        "description": "Request timeout in milliseconds"
+      },
+      "heartbeatInterval": {
+        "type": "number",
+        "default": 30000,
+        "description": "Heartbeat interval in milliseconds for WebSocket connections"
+      },
+      "maxReconnectAttempts": {
+        "type": "number",
+        "default": 3,
+        "description": "Maximum number of reconnection attempts"
+      },
+      "accounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "required": ["accountId"],
+          "properties": {
+            "accountId": {
+              "type": "string",
+              "description": "Unique identifier for this account"
+            },
+            "apiUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Account-specific WebHub Backend API URL (overrides global apiUrl)"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "Account-specific access token (overrides global accessToken)"
+            },
+            "heartbeatInterval": {
+              "type": "number",
+              "description": "Account-specific heartbeat interval in milliseconds (overrides global setting)"
+            },
+            "maxReconnectAttempts": {
+              "type": "number",
+              "description": "Account-specific maximum reconnection attempts (overrides global setting)"
+            }
+          }
+        },
+        "description": "Multiple account configurations for different WebHub Backend instances"
       }
     }
   }
