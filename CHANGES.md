@@ -1,169 +1,104 @@
 # OpenClaw Plugin Implementation Fixes
 
-## Summary
+## Version 0.1.1 (2026-02-08)
 
-This document describes the fixes applied to correct the OpenClaw plugin implementation in this repository.
+### Issue: "chatu-webhub missing register/activate export"
 
-## Issues Identified
-
-### 1. Incorrect Plugin Registration Pattern
-
-**Problem**: The plugin was using an incorrect registration pattern:
-```typescript
-// ❌ INCORRECT - Old pattern
-export default function registerWebHubChannel(api: any) {
-  api.registerChannel({ ... });
-}
+**Problem**: When running `openclaw plugins install .`, the installation failed with:
+```
+17:29:50 [plugins] chatu-webhub missing register/activate export
+[openclaw] Failed to start CLI: Error: Config validation failed: plugins.entries.webhub: plugin not found: webhub
 ```
 
-**Root Cause**: This pattern was from an older version of OpenClaw or a misunderstanding of the plugin API.
+**Root Cause**: The plugin was exporting a plugin object instead of the required `activate` function. Based on OpenClaw's plugin system documentation and examples, plugins must export an `activate` (or `register`) function that:
+1. Receives the `PluginAPI` as a parameter
+2. Calls `api.registerChannel()` to register the channel
+3. Returns lifecycle handlers (dispose, etc.)
 
-**Solution**: Updated to use the correct plugin object export pattern:
+**Solution**: Refactored the plugin to follow the correct OpenClaw plugin pattern:
+
+#### Before (Incorrect)
 ```typescript
-// ✅ CORRECT - New pattern
-export default {
+// ❌ INCORRECT - Exporting a plugin object
+const WebHubPlugin = {
   slot: 'channel',
-  id: 'webhub',
+  id: 'chatu-webhub',
   schema: ConfigSchema,
   metadata: { ... },
   async init(config, api) { ... }
-}
+};
+
+export default WebHubPlugin;
+export const register = WebHubPlugin;
+export const activate = WebHubPlugin;
 ```
 
-### 2. Missing Plugin Metadata
+#### After (Correct)
+```typescript
+// ✅ CORRECT - Exporting an activate function
+export async function activate(api: PluginAPI) {
+  const channelId = 'webhub';
+  
+  await api.registerChannel({
+    id: channelId,
+    meta: { ... },
+    capabilities: { ... },
+    config: { ... },
+    outbound: { ... },
+  });
+  
+  return {
+    name: 'webhub-channel',
+    async dispose() {
+      // cleanup
+    },
+  };
+}
 
-**Problem**: The plugin was missing critical metadata fields:
-- `slot`: Identifies the plugin type (channel, tool, provider, memory)
-- `id`: Unique plugin identifier
-- `schema`: Configuration validation schema (using TypeBox)
-- `metadata`: Plugin information (name, description, version, etc.)
+export const register = activate;
+export default activate;
+```
 
-**Solution**: Added all required metadata fields with proper TypeBox schema validation.
+### Changes Made
 
-### 3. TypeScript Type Issues
+1. **Removed plugin object pattern**: Replaced the plugin object with a direct `activate` function export
+2. **Removed TypeBox dependency**: Configuration schema is now managed by OpenClaw through `openclaw.plugin.json`
+3. **Simplified exports**: Now exports `activate`, `register`, and `default` all pointing to the activation function
+4. **Fixed channel ID**: Changed from 'chatu-webhub' to 'webhub' to match the `openclaw.plugin.json` channels array
+5. **Fixed config access**: Moved config parameter into the `sendText` function signature
 
-**Problems**:
-- Using `any` type for API parameter
-- Missing TypeScript types for browser APIs
-- Incorrect timer types (NodeJS.Timer)
-- Type-only imports used where values are needed (enums)
+### Files Modified
 
-**Solutions**:
-- Added DOM lib to tsconfig.json for browser APIs
-- Replaced `NodeJS.Timer` with `ReturnType<typeof setInterval/setTimeout>`
-- Separated enum imports from type imports
-- Added missing fields to interfaces (metadata, mode)
+- `src/index.ts` - Complete rewrite to use function-based activation pattern
+- Built output in `dist/index.js` - Regenerated with correct exports
 
-### 4. SDK Adapter Issues
+### Testing
 
-**Problems**:
-- Missing metadata field in OutboundMessage interface
-- Missing mode field in ChannelStats interface
-- Invalid wsPath property in WebHubAdapterConfig
-- Duplicate condition in WebSocket connection attempt
-- Capabilities using string arrays instead of proper enums
-
-**Solutions**:
-- Added metadata field to OutboundMessage
-- Added mode field to ChannelStats
-- Removed invalid wsPath property
-- Fixed duplicate condition
-- Used MessageType and TargetType enums properly
-
-## Files Modified
-
-### Core Plugin Files
-- `src/index.ts` - Complete rewrite to use correct plugin pattern
-- `package.json` - Added @sinclair/typebox dependency
-
-### Configuration
-- `tsconfig.json` - Added DOM lib to support browser APIs
-
-### SDK Type Definitions
-- `src/sdk/types/channel.ts` - Added metadata and mode fields
-
-### SDK Adapters
-- `src/sdk/adapters/webhub.ts` - Fixed types, enums, and configuration
-- `src/sdk/adapters/websocket.ts` - Fixed timer types
-
-## Testing
-
-After installing dependencies with `npm install`, verify the changes:
+After the fix, installation should succeed:
 
 ```bash
 # Method A: Auto-build install (recommended)
 openclaw plugins install .
 
 # Method B: Manual build install
-npm run check  # Type check
-npm run build  # Build
-openclaw plugins install ./dist
+npm install
+npm run build
+openclaw plugins install .
 ```
 
-**Note:** Since v0.1.0, the plugin includes a `prepare` script that automatically installs dependencies and compiles code when running `openclaw plugins install .`
+The plugin will now be registered correctly and the channel 'webhub' will be available in OpenClaw.
 
-## References
+### References
 
 - [OpenClaw Plugin Documentation](https://docs.openclaw.ai/plugin)
-- [Creating Custom Plugins](https://deepwiki.com/openclaw/openclaw/10.3-creating-custom-plugins)
 - [Extension Channels](https://deepwiki.com/moltbook/openclaw/8.3-extension-channels)
-- [TypeBox Schema Validation](https://github.com/sinclair/typebox)
+- [Building a Channel Plugin for OpenClaw](https://wemble.com/2026/01/31/building-an-openclaw-plugin.html)
 
-## Migration Guide
+---
 
-If you have existing OpenClaw plugins using the old pattern, update them as follows:
+## Version 0.1.0 - Previous Implementation
 
-### Before (Incorrect)
-```typescript
-export default function registerPlugin(api: any) {
-  api.registerChannel({
-    id: 'my-channel',
-    // ...
-  });
-}
-```
-
-### After (Correct)
-```typescript
-import { Type } from '@sinclair/typebox';
-
-export default {
-  slot: 'channel' as const,
-  id: 'my-channel',
-  schema: Type.Object({
-    enabled: Type.Boolean({ default: true }),
-    // ... other config fields
-  }),
-  metadata: {
-    name: 'My Channel',
-    description: 'Channel description',
-    version: '1.0.0',
-  },
-  async init(config, api) {
-    await api.registerChannel({
-      id: 'my-channel',
-      // ...
-    });
-    
-    return {
-      name: 'my-channel',
-      async dispose() {
-        // cleanup
-      },
-    };
-  },
-};
-```
-
-## Key Takeaways
-
-1. ✅ Always use the plugin object export pattern with `slot`, `id`, `schema`, `metadata`, and `init`
-2. ✅ Use TypeBox for configuration schema validation
-3. ✅ The `init` function receives validated config and PluginAPI
-4. ✅ Return lifecycle handlers (dispose, etc.) from `init`
-5. ✅ Use proper TypeScript types throughout
-6. ✅ Avoid using `any` types
-7. ✅ Use enums instead of string literals where appropriate
+For historical context, see the git history for the previous plugin object-based implementation.
 
 ---
 
