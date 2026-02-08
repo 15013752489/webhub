@@ -123,11 +123,13 @@ export default {
               timestamp: Date.now(),
             };
           } catch (error) {
-            api.log?.error({ error, text, target }, 'Failed to send message via WebHub');
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            api.log?.error({ errorMessage, errorStack, text, target }, 'Failed to send message via WebHub');
             return {
               ok: false,
               error: {
-                message: error instanceof Error ? error.message : 'Unknown error',
+                message: errorMessage,
               },
             };
           }
