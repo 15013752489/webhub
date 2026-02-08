@@ -66,11 +66,11 @@ export async function activate(api: any) {
     // Outbound message handling
     outbound: {
       deliveryMode: 'direct',
-      sendText: async ({ text, target, accountId, config }: any) => {
+      sendText: async ({ text, target, accountId, config: channelConfig }: any) => {
         try {
-          const account = config?.accounts?.[accountId] ?? {};
-          const apiUrl = account.apiUrl ?? config?.apiUrl;
-          const accessToken = account.accessToken ?? config?.accessToken;
+          const account = channelConfig?.accounts?.[accountId] ?? {};
+          const apiUrl = account.apiUrl ?? channelConfig?.apiUrl;
+          const accessToken = account.accessToken ?? channelConfig?.accessToken;
           
           if (!apiUrl || !accessToken) {
             throw new Error('WebHub API URL and access token are required');
