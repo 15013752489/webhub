@@ -157,18 +157,30 @@ const WebHubPlugin = {
 export default WebHubPlugin;
 
 /**
- * Named exports for OpenClaw compatibility
- * Some versions of OpenClaw may expect named exports instead of default export
+ * Named exports for OpenClaw plugin system compatibility
+ * 
+ * OpenClaw's plugin loader looks for either:
+ * 1. A default export of a plugin object (preferred, modern API)
+ * 2. Named exports: 'register' or 'activate' (legacy compatibility)
+ * 
+ * Based on the error message "chatu-webhub missing register/activate export",
+ * some versions of OpenClaw require these named exports to be present.
+ * 
+ * Both exports point to the same plugin object, as OpenClaw expects a plugin
+ * definition object (with slot, id, schema, metadata, init) rather than functions.
+ * 
+ * @see https://docs.openclaw.ai/plugin
+ * @see Issue: "openclaw plugins install . 时出以下错" - User reported missing register/activate export
  */
 
 /**
- * Register function - alias for the plugin definition
- * Called when the plugin is registered with OpenClaw
+ * Register export - Plugin definition object for OpenClaw
+ * Used by OpenClaw when loading the plugin
  */
 export const register = WebHubPlugin;
 
 /**
- * Activate function - alias for the plugin definition
- * Called when the plugin is activated by OpenClaw
+ * Activate export - Plugin definition object for OpenClaw  
+ * Alternative export name that some versions of OpenClaw may look for
  */
 export const activate = WebHubPlugin;
