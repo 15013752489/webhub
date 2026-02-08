@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/channel-sdk",
+  "name": "@openclaw/webhub",
   "version": "0.1.0",
   "description": "OpenClaw Channel SDK - Build custom channel plugins",
   "main": "dist/index.js",
