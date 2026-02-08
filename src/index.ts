@@ -42,7 +42,7 @@ const ConfigSchema = Type.Object({
  * - metadata: plugin information
  * - init: activation function that receives config and PluginAPI
  */
-export default {
+const WebHubPlugin = {
   slot: 'channel' as const,
   id: 'chatu-webhub',
   schema: ConfigSchema,
@@ -150,3 +150,25 @@ export default {
     };
   },
 };
+
+/**
+ * Default export for standard ES6 module imports
+ */
+export default WebHubPlugin;
+
+/**
+ * Named exports for OpenClaw compatibility
+ * Some versions of OpenClaw may expect named exports instead of default export
+ */
+
+/**
+ * Register function - alias for the plugin definition
+ * Called when the plugin is registered with OpenClaw
+ */
+export const register = WebHubPlugin;
+
+/**
+ * Activate function - alias for the plugin definition
+ * Called when the plugin is activated by OpenClaw
+ */
+export const activate = WebHubPlugin;
