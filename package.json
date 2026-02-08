@@ -6,14 +6,15 @@
   "types": "dist/index.d.ts",
   "openclaw": {
     "extensions": [
-      "./src/index.ts"
+      "./dist/index.js"
     ]
   },
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
     "check": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "prepare": "npm run build"
   },
   "keywords": [
     "openclaw",

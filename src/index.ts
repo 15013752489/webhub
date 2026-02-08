@@ -42,7 +42,7 @@ const ConfigSchema = Type.Object({
  * - metadata: plugin information
  * - init: activation function that receives config and PluginAPI
  */
-export default {
+const WebHubPlugin = {
   slot: 'channel' as const,
   id: 'chatu-webhub',
   schema: ConfigSchema,
@@ -150,3 +150,37 @@ export default {
     };
   },
 };
+
+/**
+ * Default export for standard ES6 module imports
+ */
+export default WebHubPlugin;
+
+/**
+ * Named exports for OpenClaw plugin system compatibility
+ * 
+ * OpenClaw's plugin loader looks for either:
+ * 1. A default export of a plugin object (preferred, modern API)
+ * 2. Named exports: 'register' or 'activate' (legacy compatibility)
+ * 
+ * Based on the error message "chatu-webhub missing register/activate export",
+ * some versions of OpenClaw require these named exports to be present.
+ * 
+ * Both exports point to the same plugin object, as OpenClaw expects a plugin
+ * definition object (with slot, id, schema, metadata, init) rather than functions.
+ * 
+ * @see https://docs.openclaw.ai/plugin
+ * @see Issue: "openclaw plugins install . 时出以下错" - User reported missing register/activate export
+ */
+
+/**
+ * Register export - Plugin definition object for OpenClaw
+ * Used by OpenClaw when loading the plugin
+ */
+export const register = WebHubPlugin;
+
+/**
+ * Activate export - Plugin definition object for OpenClaw  
+ * Alternative export name that some versions of OpenClaw may look for
+ */
+export const activate = WebHubPlugin;

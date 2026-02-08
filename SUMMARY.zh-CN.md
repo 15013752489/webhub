@@ -163,16 +163,13 @@ export default {
 安装依赖后进行测试：
 
 ```bash
-# 安装依赖
+# 方法 A：自动编译安装（推荐）
+openclaw plugins install .
+
+# 方法 B：手动编译安装
 npm install
-
-# 类型检查
-npm run check
-
-# 构建
-npm run build
-
-# 安装插件（如果 openclaw 可用）
+npm run check  # 类型检查
+npm run build  # 构建
 openclaw plugins install ./dist
 
 # 启用插件
@@ -183,6 +180,8 @@ openclaw config set channels.webhub.enabled true
 openclaw config set channels.webhub.apiUrl "https://your-api.com"
 openclaw config set channels.webhub.accessToken "your-token"
 ```
+
+注：从 v0.1.0 开始，插件包含 `prepare` 脚本，运行 `openclaw plugins install .` 时会自动安装依赖并编译代码。
 
 ## 迁移指南
 
