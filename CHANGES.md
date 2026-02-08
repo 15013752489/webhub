@@ -91,15 +91,16 @@ export default {
 After installing dependencies with `npm install`, verify the changes:
 
 ```bash
-# Type check
-npm run check
+# Method A: Auto-build install (recommended)
+openclaw plugins install .
 
-# Build
-npm run build
-
-# Install plugin (if openclaw is available)
+# Method B: Manual build install
+npm run check  # Type check
+npm run build  # Build
 openclaw plugins install ./dist
 ```
+
+**Note:** Since v0.1.0, the plugin includes a `prepare` script that automatically installs dependencies and compiles code when running `openclaw plugins install .`
 
 ## References
 
