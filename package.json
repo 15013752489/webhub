@@ -4,6 +4,11 @@
   "description": "OpenClaw Channel SDK - Build custom channel plugins",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
