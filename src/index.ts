@@ -9,6 +9,8 @@
  */
 
 import { Type } from '@sinclair/typebox';
+import { WebHubAdapter } from './sdk/adapters/webhub';
+import type { OutboundMessage } from './sdk/types/channel';
 
 /**
  * Channel capability constants
@@ -67,6 +69,49 @@ const WebHubPlugin = {
     // Log plugin initialization
     api.log?.info({ event: 'plugin_init', channelId }, 'Initializing WebHub channel plugin');
     
+    // Create a map to store WebHub adapters per account
+    const adapters = new Map<string, WebHubAdapter>();
+    
+    /**
+     * Get or create a WebHub adapter for a specific account
+     */
+    const getAdapter = async (accountId: string): Promise<WebHubAdapter> => {
+      const cacheKey = accountId || 'default';
+      
+      // Return existing adapter if already connected
+      if (adapters.has(cacheKey)) {
+        return adapters.get(cacheKey)!;
+      }
+      
+      // Get account-specific configuration
+      const account = config.accounts?.[accountId] ?? {};
+      const webhubUrl = account.apiUrl ?? config.apiUrl;
+      const accessToken = account.accessToken ?? config.accessToken;
+      
+      if (!webhubUrl || !accessToken) {
+        throw new Error('WebHub API URL and access token are required');
+      }
+      
+      // Create and configure adapter
+      const adapter = new WebHubAdapter({
+        channelId: cacheKey,
+        webhubUrl,
+        accessToken,
+        heartbeatInterval: 30000,
+        maxReconnectAttempts: 3,
+      });
+      
+      // Connect to WebHub
+      await adapter.connect();
+      
+      // Cache the adapter
+      adapters.set(cacheKey, adapter);
+      
+      api.log?.info({ accountId, webhubUrl }, 'WebHub adapter connected');
+      
+      return adapter;
+    };
+    
     // Register the channel with OpenClaw
     await api.registerChannel({
       id: channelId,
@@ -105,23 +150,43 @@ const WebHubPlugin = {
         deliveryMode: 'direct',
         sendText: async ({ text, target, accountId }: any) => {
           try {
-            const account = config.accounts?.[accountId] ?? {};
-            const apiUrl = account.apiUrl ?? config.apiUrl;
-            const accessToken = account.accessToken ?? config.accessToken;
+            api.log?.debug({ text, target, accountId }, 'Sending message via WebHub');
             
-            if (!apiUrl || !accessToken) {
-              throw new Error('WebHub API URL and access token are required');
+            // Get or create adapter for this account
+            const adapter = await getAdapter(accountId);
+            
+            // Prepare outbound message using SDK types
+            const message: OutboundMessage = {
+              messageId: `msg_${Date.now()}`,
+              target: {
+                type: target.type || 'user',
+                id: target.id || target,
+              },
+              content: {
+                text,
+                format: 'plain', // Use valid format: 'plain', 'markdown', or 'html'
+              },
+              metadata: {
+                source: 'openclaw',
+                channelId,
+                accountId,
+              },
+            };
+            
+            // Send message using WebHub adapter
+            const result = await adapter.send(message);
+            
+            if (result.success) {
+              api.log?.debug({ messageId: result.messageId }, 'Message sent successfully via WebHub');
+              return {
+                ok: true,
+                messageId: result.messageId,
+                timestamp: result.timestamp,
+              };
+            } else {
+              throw new Error(result.error?.message || 'Failed to send message');
             }
             
-            // TODO: Implement actual HTTP/WebSocket message sending
-            // This is a placeholder implementation
-            api.log?.debug({ text, target, apiUrl }, 'Sending message via WebHub');
-            
-            return {
-              ok: true,
-              messageId: `msg_${Date.now()}`,
-              timestamp: Date.now(),
-            };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             const errorStack = error instanceof Error ? error.stack : undefined;
@@ -146,6 +211,19 @@ const WebHubPlugin = {
       // Cleanup on plugin deactivation
       async dispose() {
         api.log?.info({ event: 'plugin_dispose', channelId }, 'Disposing WebHub channel plugin');
+        
+        // Disconnect all adapters
+        for (const [accountId, adapter] of adapters.entries()) {
+          try {
+            await adapter.disconnect();
+            api.log?.debug({ accountId }, 'WebHub adapter disconnected');
+          } catch (error) {
+            api.log?.warn({ accountId, error }, 'Failed to disconnect WebHub adapter');
+          }
+        }
+        
+        // Clear adapter map
+        adapters.clear();
       },
     };
   },
