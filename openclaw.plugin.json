@@ -3,17 +3,12 @@
   "name": "WebHub",
   "version": "0.1.0",
   "description": "Connect OpenClaw to any Website via HTTP/WebSocket",
-  "channels": ["webhub"],
-  "keywords": ["channel", "webhook", "http", "websocket"],
-  "author": "OpenClaw Team",
-  "license": "MIT",
-  "homepage": "https://github.com/chatu-ai/openclaw-web-hub-channel",
-  "repository": "https://github.com/chatu-ai/openclaw-web-hub-channel",
-  "engines": {
-    "openclaw": ">=1.0.0"
-  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "openclaw": {
-    "category": "channel"
+    "extensions": [
+      "./src/index.ts"
+    ]
   },
   "configSchema": {
     "type": "object",
@@ -21,74 +16,14 @@
     "properties": {
       "enabled": {
         "type": "boolean",
-        "default": true,
-        "description": "Enable/disable the WebHub channel"
+        "default": true
       },
       "apiUrl": {
         "type": "string",
-        "format": "uri",
-        "description": "WebHub API URL"
+        "format": "uri"
       },
       "accessToken": {
-        "type": "string",
-        "description": "Access token for authentication"
-      },
-      "timeout": {
-        "type": "integer",
-        "default": 30000,
-        "description": "Request timeout in milliseconds"
-      },
-      "retry": {
-        "type": "object",
-        "description": "Retry configuration",
-        "properties": {
-          "maxAttempts": {
-            "type": "integer",
-            "default": 3
-          },
-          "backoffMs": {
-            "type": "integer",
-            "default": 1000
-          }
-        }
-      },
-      "message": {
-        "type": "object",
-        "description": "Message configuration",
-        "properties": {
-          "maxLength": {
-            "type": "integer",
-            "default": 10000
-          },
-          "allowedFormats": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": ["plain", "markdown", "html"]
-            },
-            "default": ["plain", "markdown"]
-          }
-        }
-      },
-      "security": {
-        "type": "object",
-        "description": "Security configuration",
-        "properties": {
-          "signatureKey": {
-            "type": "string",
-            "description": "Webhook signature verification key"
-          },
-          "signatureAlgorithm": {
-            "type": "string",
-            "enum": ["sha256", "sha512"],
-            "default": "sha256"
-          }
-        }
-      },
-      "debug": {
-        "type": "boolean",
-        "default": false,
-        "description": "Enable debug logging"
+        "type": "string"
       }
     }
   }
