@@ -176,6 +176,9 @@ export interface OutboundMessage {
     /** 紧急消息 [Channel SDK 标准] */
     urgent?: boolean;
   };
+  
+  /** 元数据 [Channel SDK 标准] */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -242,6 +245,9 @@ export interface ChannelStats {
   
   /** 最后活跃时间 [Channel SDK 标准] */
   lastActiveAt: number;
+  
+  /** 连接模式 (WebHub 扩展) */
+  mode?: string;
 }
 
 /**

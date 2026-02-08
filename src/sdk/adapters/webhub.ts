@@ -19,6 +19,10 @@ import type {
   ConnectionStatus,
   ChannelStats,
 } from '../types/channel';
+import {
+  MessageType,
+  TargetType,
+} from '../types/channel';
 import type {
   ConnectionAdapter,
   MessageCallback,
@@ -106,10 +110,10 @@ export class WebHubAdapter implements ConnectionAdapter {
   private lastHeartbeat: number = 0;
   
   /** 心跳定时器 */
-  private heartbeatTimer: NodeJS.Timer | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   
   /** 轮询定时器 */
-  private pollTimer: NodeJS.Timer | null = null;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
   
   /** SSE EventSource */
   private eventSource: EventSource | null = null;
@@ -135,7 +139,6 @@ export class WebHubAdapter implements ConnectionAdapter {
       maxReconnectAttempts: 3,
       preferredMode: 'websocket',
       ssePath: '/api/channel/events',
-      wsPath: '/ws',
       pollInterval: 5000,
       ...config,
     };
@@ -172,7 +175,7 @@ export class WebHubAdapter implements ConnectionAdapter {
       let connected = false;
       
       // 3.1 尝试 WebSocket
-      if (this.config.preferredMode === 'websocket' || this.config.preferredMode === 'websocket') {
+      if (this.config.preferredMode === 'websocket') {
         connected = await this.tryWebSocket();
         if (connected) {
           this.currentMode = 'websocket';
@@ -221,9 +224,9 @@ export class WebHubAdapter implements ConnectionAdapter {
    * 尝试 WebSocket 连接
    */
   private async tryWebSocket(): Promise<boolean> {
-    const wsUrl = new URL(this.getUrl(this.config.wsPath || '/ws'));
+    const wsUrl = new URL(this.getUrl(this.config.wsUrl || '/ws'));
     wsUrl.searchParams.set('channelId', this.config.channelId);
-    wsUrl.searchParams.set('token', this.config.accessToken || this.config.accessToken);
+    wsUrl.searchParams.set('token', this.config.accessToken);
     
     return new Promise((resolve) => {
       try {
@@ -642,9 +645,9 @@ export class WebHubAdapterFactory implements AdapterFactory {
   createCapabilitiesAdapter() {
     return {
       getCapabilities: async () => ({
-        messageTypes: ['text', 'image', 'video', 'audio', 'file'],
-        targetTypes: ['user'],
-        richFormats: ['markdown'],
+        messageTypes: [MessageType.TEXT, MessageType.IMAGE, MessageType.VIDEO, MessageType.AUDIO, MessageType.FILE],
+        targetTypes: [TargetType.USER],
+        richFormats: ['markdown'] as ('markdown' | 'html')[],
         attachments: true,
         reply: true,
       }),
