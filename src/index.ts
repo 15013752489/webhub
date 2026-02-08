@@ -124,7 +124,8 @@ export default {
             };
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            api.log?.error({ errorMessage, text, target }, 'Failed to send message via WebHub');
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            api.log?.error({ errorMessage, errorStack, text, target }, 'Failed to send message via WebHub');
             return {
               ok: false,
               error: {
