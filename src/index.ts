@@ -9,6 +9,7 @@
  */
 
 import { Type } from '@sinclair/typebox';
+import { v4 as uuidv4 } from 'uuid';
 import { WebHubAdapter } from './sdk/adapters/webhub';
 import type { OutboundMessage } from './sdk/types/channel';
 
@@ -27,10 +28,14 @@ const ConfigSchema = Type.Object({
   apiUrl: Type.Optional(Type.String({ format: 'uri' })),
   accessToken: Type.Optional(Type.String()),
   timeout: Type.Optional(Type.Number({ default: 30000 })),
+  heartbeatInterval: Type.Optional(Type.Number({ default: 30000 })),
+  maxReconnectAttempts: Type.Optional(Type.Number({ default: 3 })),
   accounts: Type.Optional(Type.Record(Type.String(), Type.Object({
     accountId: Type.String(),
     apiUrl: Type.Optional(Type.String()),
     accessToken: Type.Optional(Type.String()),
+    heartbeatInterval: Type.Optional(Type.Number()),
+    maxReconnectAttempts: Type.Optional(Type.Number()),
   }))),
 });
 
@@ -97,8 +102,8 @@ const WebHubPlugin = {
         channelId: cacheKey,
         webhubUrl,
         accessToken,
-        heartbeatInterval: 30000,
-        maxReconnectAttempts: 3,
+        heartbeatInterval: account.heartbeatInterval ?? config.heartbeatInterval ?? 30000,
+        maxReconnectAttempts: account.maxReconnectAttempts ?? config.maxReconnectAttempts ?? 3,
       });
       
       // Connect to WebHub
@@ -157,7 +162,7 @@ const WebHubPlugin = {
             
             // Prepare outbound message using SDK types
             const message: OutboundMessage = {
-              messageId: `msg_${Date.now()}`,
+              messageId: uuidv4(), // Use UUID for reliable unique message IDs
               target: {
                 type: target.type || 'user',
                 id: target.id || target,

@@ -25,10 +25,14 @@ declare const WebHubPlugin: {
         apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         timeout: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         accounts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TRecord<import("@sinclair/typebox").TString, import("@sinclair/typebox").TObject<{
             accountId: import("@sinclair/typebox").TString;
             apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
             accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+            heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+            maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         }>>>;
     }>;
     metadata: {
@@ -82,10 +86,14 @@ export declare const register: {
         apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         timeout: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         accounts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TRecord<import("@sinclair/typebox").TString, import("@sinclair/typebox").TObject<{
             accountId: import("@sinclair/typebox").TString;
             apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
             accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+            heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+            maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         }>>>;
     }>;
     metadata: {
@@ -119,10 +127,14 @@ export declare const activate: {
         apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
         timeout: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+        maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         accounts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TRecord<import("@sinclair/typebox").TString, import("@sinclair/typebox").TObject<{
             accountId: import("@sinclair/typebox").TString;
             apiUrl: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
             accessToken: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TString>;
+            heartbeatInterval: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
+            maxReconnectAttempts: import("@sinclair/typebox").TOptional<import("@sinclair/typebox").TNumber>;
         }>>>;
     }>;
     metadata: {

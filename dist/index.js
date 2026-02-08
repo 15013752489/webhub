@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = exports.register = void 0;
 const typebox_1 = require("@sinclair/typebox");
+const uuid_1 = require("uuid");
 const webhub_1 = require("./sdk/adapters/webhub");
 /**
  * Channel capability constants
@@ -26,10 +27,14 @@ const ConfigSchema = typebox_1.Type.Object({
     apiUrl: typebox_1.Type.Optional(typebox_1.Type.String({ format: 'uri' })),
     accessToken: typebox_1.Type.Optional(typebox_1.Type.String()),
     timeout: typebox_1.Type.Optional(typebox_1.Type.Number({ default: 30000 })),
+    heartbeatInterval: typebox_1.Type.Optional(typebox_1.Type.Number({ default: 30000 })),
+    maxReconnectAttempts: typebox_1.Type.Optional(typebox_1.Type.Number({ default: 3 })),
     accounts: typebox_1.Type.Optional(typebox_1.Type.Record(typebox_1.Type.String(), typebox_1.Type.Object({
         accountId: typebox_1.Type.String(),
         apiUrl: typebox_1.Type.Optional(typebox_1.Type.String()),
         accessToken: typebox_1.Type.Optional(typebox_1.Type.String()),
+        heartbeatInterval: typebox_1.Type.Optional(typebox_1.Type.Number()),
+        maxReconnectAttempts: typebox_1.Type.Optional(typebox_1.Type.Number()),
     }))),
 });
 /**
@@ -87,8 +92,8 @@ const WebHubPlugin = {
                 channelId: cacheKey,
                 webhubUrl,
                 accessToken,
-                heartbeatInterval: 30000,
-                maxReconnectAttempts: 3,
+                heartbeatInterval: account.heartbeatInterval ?? config.heartbeatInterval ?? 30000,
+                maxReconnectAttempts: account.maxReconnectAttempts ?? config.maxReconnectAttempts ?? 3,
             });
             // Connect to WebHub
             await adapter.connect();
@@ -136,7 +141,7 @@ const WebHubPlugin = {
                         const adapter = await getAdapter(accountId);
                         // Prepare outbound message using SDK types
                         const message = {
-                            messageId: `msg_${Date.now()}`,
+                            messageId: (0, uuid_1.v4)(), // Use UUID for reliable unique message IDs
                             target: {
                                 type: target.type || 'user',
                                 id: target.id || target,
