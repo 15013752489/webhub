@@ -44,7 +44,7 @@ const ConfigSchema = Type.Object({
  */
 export default {
   slot: 'channel' as const,
-  id: 'webhub',
+  id: 'chatu-webhub',
   schema: ConfigSchema,
   metadata: {
     name: 'WebHub',
@@ -62,7 +62,7 @@ export default {
    * @returns Channel plugin implementation
    */
   async init(config: any, api: any) {
-    const channelId = 'webhub';
+    const channelId = 'chatu-webhub';
     
     // Log plugin initialization
     api.log?.info({ event: 'plugin_init', channelId }, 'Initializing WebHub channel plugin');

@@ -1,5 +1,5 @@
 {
-  "id": "webhub",
+  "id": "chatu-webhub",
   "name": "WebHub",
   "version": "0.1.0",
   "description": "Connect OpenClaw to any Website via HTTP/WebSocket",
