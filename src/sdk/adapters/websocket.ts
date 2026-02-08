@@ -66,10 +66,10 @@ export class WebSocketAdapter implements ConnectionAdapter {
   private lastHeartbeat: number = 0;
   
   /** 心跳定时器 [Channel SDK 标准] */
-  private heartbeatTimer: NodeJS.Timer | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   
   /** 重连定时器 [Channel SDK 标准] */
-  private reconnectTimer: NodeJS.Timer | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   
   /** 重连次数 [Channel SDK 标准] */
   private reconnectAttempts: number = 0;
