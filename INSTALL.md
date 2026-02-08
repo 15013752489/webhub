@@ -18,30 +18,30 @@ npm install -g @openclaw/webhub
 
 ### 1.2 From Source
 
-**方法 A：自动编译安装（推荐）**
+**方法 A：直接安装（推荐）**
 
 ```bash
 # Clone the repository
 git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
 cd openclaw-web-hub-channel
 
-# Install as plugin (will auto-build via prepare script)
+# Install as plugin (pre-built dist/ included in repository)
 openclaw plugins install .
 ```
 
-**方法 B：手动编译安装**
+**方法 B：重新编译后安装**
 
 ```bash
 # Clone the repository
 git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
 cd openclaw-web-hub-channel
 
-# Build the extension
+# Rebuild the extension (optional - if you made changes to source)
 npm install
 npm run build
 
-# Install locally from dist directory
-openclaw plugins install ./dist
+# Install locally
+openclaw plugins install .
 ```
 
 ### 1.3 As Plugin (Development)

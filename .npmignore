@@ -1,0 +1,36 @@
+# Source files (not needed in published package - dist/ is included)
+src/
+tsconfig.json
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tests
+coverage/
+.nyc_output/
+
+# Documentation (except README)
+docs/
+CHANGES.md
+INSTALL.md
+SUMMARY.zh-CN.md
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+*.tgz
+.cache/

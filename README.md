@@ -52,7 +52,10 @@ openclaw-web-hub-channel/
 ├── INSTALL.md            # Installation guide
 ├── openclaw.plugin.json  # Plugin metadata
 ├── package.json          # npm package config
+├── dist/                 # Compiled JavaScript (committed to git)
+│   └── index.js          # Main entry point
 ├── src/
+│   ├── index.ts          # Plugin implementation
 │   └── sdk/              # Channel SDK implementation
 │       ├── index.ts      # Main entry
 │       ├── core/         # Core classes (Channel, Message, etc.)
@@ -62,6 +65,8 @@ openclaw-web-hub-channel/
     ├── channel/          # Channel SDK docs
     └── sdk/              # SDK design discussions
 ```
+
+**Note**: The `dist/` folder is committed to the repository to allow direct installation via `openclaw plugins install .` without requiring a build step.
 
 ## Related Projects
 

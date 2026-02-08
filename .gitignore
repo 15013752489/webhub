@@ -4,7 +4,8 @@ node_modules/
 .pnp.js
 
 # Build outputs
-dist/
+# Note: dist/ is NOT ignored because it's needed for git-based installations
+# (e.g., openclaw plugins install .)
 build/
 *.tsbuildinfo
 
