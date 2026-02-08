@@ -11,15 +11,13 @@
  * @see https://github.com/chatu-ai/openclaw-web-hub-channel
  ******************************************************************/
 
-import type {
+import {
   InboundMessage,
   OutboundMessage,
   SendResult,
   ConnectionConfig,
   ConnectionStatus,
   ChannelStats,
-} from '../types/channel';
-import {
   MessageType,
   TargetType,
 } from '../types/channel';

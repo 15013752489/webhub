@@ -11,6 +11,13 @@
 import { Type } from '@sinclair/typebox';
 
 /**
+ * Channel capability constants
+ */
+const SUPPORTED_CHAT_TYPES = ['direct', 'group'] as const;
+const SUPPORTED_MEDIA_TYPES = ['text', 'image', 'file'] as const;
+const SUPPORTED_FEATURES = ['reply', 'edit', 'delete'] as const;
+
+/**
  * Plugin configuration schema
  */
 const ConfigSchema = Type.Object({
@@ -76,9 +83,9 @@ export default {
       
       // Channel capabilities
       capabilities: {
-        chatTypes: ['direct', 'group'],
-        media: ['text', 'image', 'file'],
-        features: ['reply', 'edit', 'delete'],
+        chatTypes: [...SUPPORTED_CHAT_TYPES],
+        media: [...SUPPORTED_MEDIA_TYPES],
+        features: [...SUPPORTED_FEATURES],
       },
       
       // Configuration management
