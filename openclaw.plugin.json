@@ -3,13 +3,10 @@
   "name": "WebHub",
   "version": "0.1.0",
   "description": "Connect OpenClaw to any Website via HTTP/WebSocket",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "openclaw": {
-    "extensions": [
-      "./src/index.ts"
-    ]
-  },
+  "kind": "channel",
+  "channels": [
+    "webhub"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
