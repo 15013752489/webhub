@@ -18,7 +18,6 @@
       },
       "apiUrl": {
         "type": "string",
-        "format": "uri",
         "description": "Default API base URL for Chatu service"
       },
       "accessToken": {
@@ -41,7 +40,6 @@
             },
             "apiUrl": {
               "type": "string",
-              "format": "uri",
               "description": "Account-specific API URL (overrides default)"
             },
             "accessToken": {
