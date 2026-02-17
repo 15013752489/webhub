@@ -1,6 +1,6 @@
-# WebHub Channel Installation Guide
+# Chatu Channel Installation Guide
 
-> This guide covers installing the WebHub channel to connect OpenClaw with any Website.
+> This guide covers installing the Chatu channel to connect OpenClaw with any Website.
 
 ---
 
@@ -9,16 +9,16 @@
 ### 1.1 From npm (Recommended)
 
 ```bash
-# Install as OpenClaw extension
-openclaw extensions install @openclaw/webhub
+# Install as OpenClaw plugin
+openclaw plugins install @openclaw/chatu
 
-# Or using npm directly
-npm install -g @openclaw/webhub
+# Or using npm directly (if publishing to npm)
+npm install -g @openclaw/chatu
 ```
 
 ### 1.2 From Source
 
-**方法 A：自动编译安装（推荐）**
+**Method A: Auto-build Install (Recommended)**
 
 ```bash
 # Clone the repository
@@ -29,31 +29,32 @@ cd openclaw-web-hub-channel
 openclaw plugins install .
 ```
 
-**方法 B：手动编译安装**
+**Method B: Manual Build Install**
 
 ```bash
 # Clone the repository
 git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
 cd openclaw-web-hub-channel
 
-# Build the extension
+# Build the plugin
 npm install
 npm run build
 
-# Install locally from dist directory
-openclaw plugins install ./dist
+# Install locally
+openclaw plugins install .
 ```
 
-### 1.3 As Plugin (Development)
+### 1.3 Development Mode
 
 ```bash
-# Link for development
+# Link for development (with hot reload)
+openclaw plugins install -l .
 cd /path/to/openclaw-web-hub-channel
 npm link
 
 # In your OpenClaw directory
-npm link @openclaw/webhub
-openclaw extensions install @openclaw/webhub
+npm link @openclaw/chatu
+openclaw extensions install @openclaw/chatu
 ```
 
 ---
@@ -64,13 +65,13 @@ openclaw extensions install @openclaw/webhub
 
 ```bash
 # Enable the channel
-openclaw config set channels.webhub.enabled true
+openclaw config set channels.chatu.enabled true
 
-# Set WebHub service URL (provided by your Website)
-openclaw config set channels.webhub.webhookUrl "https://your-website.com/webhub"
+# Set Chatu service URL (provided by your Website)
+openclaw config set channels.chatu.webhookUrl "https://your-website.com/chatu"
 
 # Set access token (provided by your Website)
-openclaw config set channels.webhub.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
+openclaw config set channels.chatu.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 ```
 
 ### 2.2 Full Configuration
@@ -78,11 +79,11 @@ openclaw config set channels.webhub.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 ```json5
 {
   channels: {
-    webhub: {
+    chatu: {
       enabled: true,
       
-      // WebHub service URL [Required]
-      webhookUrl: "https://your-website.com/webhub",
+      // Chatu service URL [Required]
+      webhookUrl: "https://your-website.com/chatu",
       
       // Access token [Required]
       accessToken: "wh_eyJhbGciOiJIUzI1NiIs...",
@@ -116,11 +117,11 @@ openclaw config set channels.webhub.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 
 ```bash
 # Alternative: Use environment variables
-export WEBHUB_WEBHOOK_URL="https://your-website.com/webhub"
-export WEBHUB_ACCESS_TOKEN="wh_eyJhbGciOiJIUzI1NiIs..."
+export CHATU_WEBHOOK_URL="https://your-website.com/chatu"
+export CHATU_ACCESS_TOKEN="wh_eyJhbGciOiJIUzI1NiIs..."
 
 # Then configure
-openclaw config set channels.webhub.enabled true
+openclaw config set channels.chatu.enabled true
 ```
 
 ---
@@ -131,24 +132,24 @@ openclaw config set channels.webhub.enabled true
 
 ```bash
 # View channel status
-openclaw channels status webhub
+openclaw channels status chatu
 
 # Output example:
-# Channel: webhub
+# Channel: chatu
 # Status: enabled
-# Webhook URL: https://your-website.com/webhub
+# Webhook URL: https://your-website.com/chatu
 # Connection: testing...
 ```
 
 ### 3.2 Test Connection
 
 ```bash
-# Test connection to WebHub service
-openclaw channels test webhub
+# Test connection to Chatu service
+openclaw channels test chatu
 
 # Output example:
-# ✓ WebHub channel enabled
-# ✓ Webhook URL: https://your-website.com/webhub
+# ✓ Chatu channel enabled
+# ✓ Webhook URL: https://your-website.com/chatu
 # ✓ Connection: OK
 # ✓ Last ping: 2024-02-06 21:45:00
 ```
@@ -157,7 +158,7 @@ openclaw channels test webhub
 
 ```bash
 # Check connection logs
-openclaw logs --channel webhub --level debug
+openclaw logs --channel chatu --level debug
 ```
 
 ---
@@ -168,20 +169,20 @@ openclaw logs --channel webhub --level debug
 
 ```bash
 # Disable the channel
-openclaw config set channels.webhub.enabled false
+openclaw config set channels.chatu.enabled false
 
 # Or remove entirely
-openclaw config unset channels.webhub
+openclaw config unset channels.chatu
 ```
 
 ### 4.2 Remove Extension
 
 ```bash
 # Remove from OpenClaw
-openclaw extensions uninstall @openclaw/webhub
+openclaw extensions uninstall @openclaw/chatu
 
 # If installed from npm
-npm uninstall -g @openclaw/webhub
+npm uninstall -g @openclaw/chatu
 ```
 
 ---
@@ -202,13 +203,13 @@ npm uninstall -g @openclaw/webhub
 
 ```bash
 # Enable debug logging
-openclaw config set channels.webhub.debug true
+openclaw config set channels.chatu.debug true
 
 # View detailed logs
-openclaw logs --channel webhub --level debug
+openclaw logs --channel chatu --level debug
 
 # Test webhook manually
-curl -X POST https://your-website.com/webhub/webhook \
+curl -X POST https://your-website.com/chatu/webhook \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{"test": true}'
@@ -218,7 +219,7 @@ curl -X POST https://your-website.com/webhub/webhook \
 
 ```bash
 # View channel help
-openclaw channels help webhub
+openclaw channels help chatu
 
 # Check OpenClaw documentation
 openclaw help
@@ -232,17 +233,17 @@ openclaw help
 
 ```bash
 # Update to latest version
-openclaw extensions update @openclaw/webhub
+openclaw extensions update @openclaw/chatu
 
 # Or via npm
-npm update -g @openclaw/webhub
+npm update -g @openclaw/chatu
 ```
 
 ### 6.2 Check Version
 
 ```bash
 # View installed version
-openclaw extensions list | grep webhub
+openclaw extensions list | grep chatu
 
 # Check for updates
 openclaw extensions update --check
@@ -252,7 +253,7 @@ openclaw extensions update --check
 
 ## Related Documentation
 
-- [WebHub Design Docs](../docs/webhub/README.md) - API design
+- [Chatu Design Docs](../docs/chatu/README.md) - API design
 - [OpenClaw Configuration](https://docs.openclaw.ai/gateway/configuration) - Official docs
 - [Channel SDK](../docs/channel/README.md) - Developer guide
 

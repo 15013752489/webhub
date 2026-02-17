@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/webhub",
+  "name": "@openclaw/chatu",
   "version": "0.1.0",
   "description": "OpenClaw Channel SDK - Build custom channel plugins",
   "main": "dist/index.js",
@@ -7,7 +7,21 @@
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "channel": {
+      "id": "chatu",
+      "label": "Chatu",
+      "selectionLabel": "Chatu (HTTP/WebSocket)",
+      "docsPath": "/channels/chatu",
+      "docsLabel": "chatu",
+      "blurb": "Connect to any website via HTTP/WebSocket",
+      "order": 60,
+      "aliases": ["chatu", "http-channel"]
+    },
+    "install": {
+      "npmSpec": "@openclaw/chatu",
+      "defaultChoice": "npm"
+    }
   },
   "scripts": {
     "build": "tsc",
@@ -32,11 +46,7 @@
   },
   "homepage": "https://github.com/chatu-ai/openclaw-web-hub-channel",
   "engines": {
-    "node": ">=18.0.0",
-    "openclaw": ">=1.0.0"
-  },
-  "peerDependencies": {
-    "openclaw": ">=1.0.0"
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.32.0",

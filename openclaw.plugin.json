@@ -1,11 +1,11 @@
 {
-  "id": "chatu-webhub",
-  "name": "WebHub",
+  "id": "chatu",
+  "name": "Chatu",
   "version": "0.1.0",
   "description": "Connect OpenClaw to any Website via HTTP/WebSocket",
   "kind": "channel",
   "channels": [
-    "webhub"
+    "chatu"
   ],
   "configSchema": {
     "type": "object",
@@ -13,15 +13,72 @@
     "properties": {
       "enabled": {
         "type": "boolean",
-        "default": true
+        "default": true,
+        "description": "Enable or disable the Chatu channel"
       },
       "apiUrl": {
         "type": "string",
-        "format": "uri"
+        "format": "uri",
+        "description": "Default API base URL for Chatu service"
       },
       "accessToken": {
-        "type": "string"
+        "type": "string",
+        "description": "Default access token for authentication"
+      },
+      "timeout": {
+        "type": "number",
+        "default": 30000,
+        "description": "Request timeout in milliseconds"
+      },
+      "accounts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "accountId": {
+              "type": "string",
+              "description": "Unique account identifier"
+            },
+            "apiUrl": {
+              "type": "string",
+              "format": "uri",
+              "description": "Account-specific API URL (overrides default)"
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "Account-specific access token (overrides default)"
+            }
+          },
+          "required": ["accountId"]
+        },
+        "description": "Multiple account configurations"
       }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enabled",
+      "description": "Enable Chatu channel"
+    },
+    "apiUrl": {
+      "label": "API URL",
+      "placeholder": "https://api.example.com",
+      "description": "Default Chatu API base URL"
+    },
+    "accessToken": {
+      "label": "Access Token",
+      "sensitive": true,
+      "placeholder": "Your API access token",
+      "description": "Default access token for API authentication"
+    },
+    "timeout": {
+      "label": "Timeout (ms)",
+      "placeholder": "30000",
+      "description": "Request timeout in milliseconds"
+    },
+    "accounts": {
+      "label": "Accounts",
+      "description": "Configure multiple Chatu accounts"
     }
   }
 }

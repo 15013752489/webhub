@@ -1,74 +1,94 @@
-# OpenClaw Channel SDK
+# OpenClaw Chatu Channel Plugin
 
-Official SDK for building custom OpenClaw channel plugins with HTTP/WebSocket support.
+Official OpenClaw channel plugin for connecting to any website via HTTP/WebSocket.
 
-## What is Channel SDK?
+## What is Chatu Channel?
 
-Channel SDK provides **TypeScript interfaces and base classes** for building OpenClaw channel plugins that communicate via HTTP and/or WebSocket protocols.
+Chatu is a flexible channel plugin that enables OpenClaw to communicate with any HTTP/WebSocket-based messaging service. It provides a universal interface for connecting OpenClaw to custom web applications.
 
 ## Quick Start
 
 ### 1. Install
 
 ```bash
-npm install @openclaw/channel-sdk
+openclaw plugins install @openclaw/chatu
 ```
 
-### 2. Create a Channel
+### 2. Configure
 
-```typescript
-import { Channel, ChannelConfig } from '@openclaw/channel-sdk';
+Add to your OpenClaw configuration:
 
-interface MyConfig extends ChannelConfig {
-  webhookUrl: string;
-  accessToken: string;
-}
-
-class MyChannel extends Channel<MyConfig> {
-  async send(message: OutboundMessage): Promise<SendResult> {
-    // Implement HTTP/WebSocket sending logic
+```json
+{
+  "channels": {
+    "chatu": {
+      "enabled": true,
+      "apiUrl": "https://your-api.example.com",
+      "accessToken": "your-access-token"
+    }
   }
 }
 ```
 
-### 3. Register with OpenClaw
+### 3. Use
 
-```typescript
-ChannelRegistry.register('my-channel', MyChannel);
+The channel will automatically handle message routing once configured.
+
+## Features
+
+- 🔌 Universal HTTP/WebSocket connectivity
+- 🔐 Secure token-based authentication
+- 📝 Support for text, images, and file attachments
+- 👥 Direct messages and group chat support
+- 🔄 Message editing and deletion
+- 💬 Reply threading
+
+## Configuration
+
+### Basic Configuration
+
+```json
+{
+  "channels": {
+    "chatu": {
+      "enabled": true,
+      "apiUrl": "https://api.example.com",
+      "accessToken": "your-token",
+      "timeout": 30000
+    }
+  }
+}
+```
+
+### Multi-Account Configuration
+
+```json
+{
+  "channels": {
+    "chatu": {
+      "accounts": {
+        "work": {
+          "accountId": "work",
+          "apiUrl": "https://work-api.example.com",
+          "accessToken": "work-token"
+        },
+        "personal": {
+          "accountId": "personal",
+          "apiUrl": "https://personal-api.example.com",
+          "accessToken": "personal-token"
+        }
+      }
+    }
+  }
+}
 ```
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [INSTALL.md](INSTALL.md) | Installation guide |
-| [docs/channel/README.md](docs/channel/README.md) | Channel SDK documentation |
-
-## Project Structure
-
-```
-openclaw-web-hub-channel/
-├── README.md              # This file
-├── INSTALL.md            # Installation guide
-├── openclaw.plugin.json  # Plugin metadata
-├── package.json          # npm package config
-├── src/
-│   └── sdk/              # Channel SDK implementation
-│       ├── index.ts      # Main entry
-│       ├── core/         # Core classes (Channel, Message, etc.)
-│       ├── adapters/     # Protocol adapters (HTTP, WebSocket)
-│       └── types/       # TypeScript types
-└── docs/
-    ├── channel/          # Channel SDK docs
-    └── sdk/              # SDK design discussions
-```
-
-## Related Projects
-
-| Project | Description |
-|---------|-------------|
-| [chatu-web-hub-service](https://github.com/chatu-ai/chatu-web-hub-service) | Reference backend implementation |
-| [chatu-web-hub-front](https://github.com/chatu-ai/chatu-web-hub-front) | Reference frontend UI |
+For detailed documentation, see:
+- [Installation Guide](INSTALL.md)
+- [Channel Documentation](docs/channel/README.md)
+- [OpenClaw Plugin Docs](https://docs.openclaw.ai/plugin)
 
 ## License
 
