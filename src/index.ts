@@ -65,7 +65,43 @@ export default function (api: any) {
     // Outbound message handling
     outbound: {
       deliveryMode: 'direct' as const,
-      sendText: async ({ text, target, accountId }: any) => {
+      
+      // Resolve target - accept any string as a valid target
+      resolveTarget: async (target: string) => {
+        // Return the target as-is, allowing any target ID
+        return {
+          id: target,
+          label: target,
+          type: 'direct' as const,
+        };
+      },
+      
+      // Handle all targets for this channel
+      listTargets: async ({ accountId }: any) => {
+        try {
+          const pluginConfig = api.config?.plugins?.entries?.chatu?.config ?? {};
+          const channelConfig = api.config?.channels?.chatu ?? {};
+          const account = channelConfig.accounts?.[accountId ?? 'default'] ?? {};
+          const apiUrl = account.apiUrl ?? channelConfig.apiUrl ?? pluginConfig.apiUrl;
+          
+          if (!apiUrl) {
+            return [];
+          }
+          
+          // Return a default target based on channel ID
+          // In a real implementation, you might fetch this from the server
+          return [{
+            id: accountId || 'default',
+            label: `Chatu Channel (${accountId || 'default'})`,
+            type: 'direct' as const,
+          }];
+        } catch (error) {
+          api.log?.error({ error }, 'Failed to list targets');
+          return [];
+        }
+      },
+      
+      sendText: async ({ text, target, accountId, replyTo }: any) => {
         try {
           // Get plugin configuration via api.config
           const pluginConfig = api.config?.plugins?.entries?.chatu?.config ?? {};
@@ -75,28 +111,184 @@ export default function (api: any) {
           const account = channelConfig.accounts?.[accountId ?? 'default'] ?? {};
           const apiUrl = account.apiUrl ?? channelConfig.apiUrl ?? pluginConfig.apiUrl;
           const accessToken = account.accessToken ?? channelConfig.accessToken ?? pluginConfig.accessToken;
+          const timeout = account.timeout ?? channelConfig.timeout ?? pluginConfig.timeout ?? 30000;
+          
+          if (!apiUrl) {
+            throw new Error('Chatu API URL is required. Configure with: openclaw config set channels.chatu.apiUrl "http://localhost:3000"');
+          }
+          
+          if (!accessToken) {
+            throw new Error('Chatu access token is required. Configure with: openclaw config set channels.chatu.accessToken "your-token"');
+          }
+          
+          // Prepare message payload
+          const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const payload = {
+            messageId,
+            target: {
+              type: 'user',
+              id: target || accountId || 'default',
+            },
+            content: {
+              text,
+              format: 'plain',
+            },
+            timestamp: Date.now(),
+            ...(replyTo && { replyTo }),
+          };
+          
+          api.log?.info({ 
+            event: 'sending_message',
+            target: payload.target,
+            apiUrl,
+            messageId 
+          }, 'Sending message to Chatu service');
+          
+          // Send HTTP POST request
+          const url = `${apiUrl}/api/channel/messages`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Channel-Token': accessToken,
+                'X-Channel-ID': accountId || 'default',
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            const result = await response.json();
+            
+            api.log?.info({ 
+              event: 'message_sent',
+              messageId,
+              result 
+            }, 'Message sent successfully');
+            
+            return {
+              ok: true,
+              messageId: result.messageId || messageId,
+              timestamp: result.deliveredAt ? new Date(result.deliveredAt).getTime() : Date.now(),
+            };
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            
+            if (fetchError.name === 'AbortError') {
+              throw new Error(`Request timeout after ${timeout}ms`);
+            }
+            
+            throw fetchError;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const errorStack = error instanceof Error ? error.stack : undefined;
+          api.log?.error({ 
+            event: 'send_message_failed',
+            errorMessage, 
+            errorStack, 
+            text, 
+            target 
+          }, 'Failed to send message via Chatu');
+          
+          return {
+            ok: false,
+            error: {
+              message: errorMessage,
+              code: 'SEND_FAILED',
+            },
+          };
+        }
+      },
+      
+      sendMedia: async ({ mediaUrl, mediaType, caption, target, accountId }: any) => {
+        try {
+          const pluginConfig = api.config?.plugins?.entries?.chatu?.config ?? {};
+          const channelConfig = api.config?.channels?.chatu ?? {};
+          const account = channelConfig.accounts?.[accountId ?? 'default'] ?? {};
+          const apiUrl = account.apiUrl ?? channelConfig.apiUrl ?? pluginConfig.apiUrl;
+          const accessToken = account.accessToken ?? channelConfig.accessToken ?? pluginConfig.accessToken;
+          const timeout = account.timeout ?? channelConfig.timeout ?? pluginConfig.timeout ?? 30000;
           
           if (!apiUrl || !accessToken) {
             throw new Error('Chatu API URL and access token are required');
           }
           
-          // TODO: Implement actual HTTP/WebSocket message sending
-          // This is a placeholder implementation
-          api.log?.debug({ text, target, apiUrl }, 'Sending message via Chatu');
-          
-          return {
-            ok: true,
-            messageId: `msg_${Date.now()}`,
+          const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const payload = {
+            messageId,
+            target: {
+              type: 'user',
+              id: target || accountId || 'default',
+            },
+            content: {
+              text: caption || '',
+              format: 'plain',
+            },
+            media: [{
+              type: mediaType || 'file',
+              url: mediaUrl,
+            }],
             timestamp: Date.now(),
           };
+          
+          api.log?.info({ event: 'sending_media', messageId, mediaType }, 'Sending media message');
+          
+          const url = `${apiUrl}/api/channel/messages`;
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+          
+          try {
+            const response = await fetch(url, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Channel-Token': accessToken,
+                'X-Channel-ID': accountId || 'default',
+              },
+              body: JSON.stringify(payload),
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+            
+            const result = await response.json();
+            
+            return {
+              ok: true,
+              messageId: result.messageId || messageId,
+              timestamp: result.deliveredAt ? new Date(result.deliveredAt).getTime() : Date.now(),
+            };
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+              throw new Error(`Request timeout after ${timeout}ms`);
+            }
+            throw fetchError;
+          }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          const errorStack = error instanceof Error ? error.stack : undefined;
-          api.log?.error({ errorMessage, errorStack, text, target }, 'Failed to send message via Chatu');
+          api.log?.error({ event: 'send_media_failed', errorMessage, mediaUrl, target }, 'Failed to send media');
           return {
             ok: false,
             error: {
               message: errorMessage,
+              code: 'SEND_MEDIA_FAILED',
             },
           };
         }
