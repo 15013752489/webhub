@@ -8,8 +8,8 @@ set -e
 
 # 配置
 BASE_URL="http://localhost:3000"
-CHANNEL_ID="23ade6a3-b393-4ed3-895c-41420162e334"
-ACCESS_TOKEN="wh_2835b6943ab548dda29b2538ca18e1ef"
+CHANNEL_ID="72add9a2-bc18-4c4d-98c1-46ca38b6911e"
+ACCESS_TOKEN="wh_0dbafcfeea544deb8750916a377c5523"
 
 echo "================================"
 echo "OpenClaw Chatu Channel 测试脚本"

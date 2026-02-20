@@ -28,7 +28,107 @@ export default function (api: any) {
   
   // Log plugin initialization
   api.log?.info({ event: 'plugin_init', channelId }, 'Initializing Chatu channel plugin');
-  
+
+  // Helper: get resolved config (channel-level, no per-account for lifecycle)
+  function getConfig() {
+    const pluginConfig = api.config?.plugins?.entries?.chatu?.config ?? {};
+    const channelConfig = api.config?.channels?.chatu ?? {};
+    return {
+      apiUrl: channelConfig.apiUrl ?? pluginConfig.apiUrl,
+      channelId: channelConfig.channelId ?? pluginConfig.channelId,
+      secret: channelConfig.secret ?? pluginConfig.secret,
+      accessToken: channelConfig.accessToken ?? pluginConfig.accessToken,
+      timeout: channelConfig.timeout ?? pluginConfig.timeout ?? 30000,
+    };
+  }
+
+  // Register + Connect lifecycle: called at plugin start
+  async function registerAndConnect(): Promise<void> {
+    const cfg = getConfig();
+    if (!cfg.apiUrl) {
+      api.log?.warn({ event: 'lifecycle_skip' }, 'No apiUrl configured, skipping register/connect');
+      return;
+    }
+
+    // Step 1: register (secret → accessToken, status: registered)
+    if (cfg.channelId && cfg.secret) {
+      try {
+        const resp = await fetch(`${cfg.apiUrl}/api/channel/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channelId: cfg.channelId, secret: cfg.secret }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const token = data?.data?.accessToken;
+          if (token) {
+            // Persist the returned token back to config
+            try {
+              await api.config?.set?.('channels.chatu.accessToken', token);
+            } catch (_) {
+              // config.set may not be available; log and continue with existing token
+            }
+            api.log?.info({ event: 'channel_registered', channelId: cfg.channelId }, 'Channel registered');
+            cfg.accessToken = token;
+          }
+        } else {
+          const body = await resp.text();
+          api.log?.warn({ event: 'register_failed', status: resp.status, body }, 'Register failed, using existing accessToken');
+        }
+      } catch (err) {
+        api.log?.warn({ event: 'register_error', err }, 'Register request failed, continuing');
+      }
+    }
+
+    // Step 2: connect (accessToken → status: connected)
+    const token = cfg.accessToken;
+    const cid = cfg.channelId;
+    if (token && cid) {
+      try {
+        const resp = await fetch(`${cfg.apiUrl}/api/channel/connect`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-access-token': token,
+          },
+          body: JSON.stringify({ channelId: cid }),
+        });
+        if (resp.ok) {
+          api.log?.info({ event: 'channel_connected', channelId: cid }, 'Channel connected');
+        } else {
+          const body = await resp.text();
+          api.log?.warn({ event: 'connect_failed', status: resp.status, body }, 'Connect failed');
+        }
+      } catch (err) {
+        api.log?.warn({ event: 'connect_error', err }, 'Connect request failed');
+      }
+    } else {
+      api.log?.warn({ event: 'connect_skip' }, 'Missing accessToken or channelId, skipping connect');
+    }
+  }
+
+  // Disconnect lifecycle: called at plugin dispose
+  async function disconnect(): Promise<void> {
+    const cfg = getConfig();
+    if (!cfg.apiUrl || !cfg.accessToken || !cfg.channelId) return;
+    try {
+      await fetch(`${cfg.apiUrl}/api/channel/disconnect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-access-token': cfg.accessToken,
+        },
+        body: JSON.stringify({ channelId: cfg.channelId }),
+      });
+      api.log?.info({ event: 'channel_disconnected', channelId: cfg.channelId }, 'Channel disconnected');
+    } catch (err) {
+      api.log?.warn({ event: 'disconnect_error', err }, 'Disconnect request failed');
+    }
+  }
+
+  // Kick off register+connect (non-blocking, errors are logged not thrown)
+  registerAndConnect().catch(err => api.log?.error({ err }, 'registerAndConnect uncaught error'));
+
   // Define the channel configuration
   const chatuChannel = {
     id: channelId,
@@ -308,6 +408,7 @@ export default function (api: any) {
     // Cleanup on plugin deactivation
     async dispose() {
       api.log?.info({ event: 'plugin_dispose', channelId }, 'Disposing Chatu channel plugin');
+      await disconnect();
     },
   };
 }

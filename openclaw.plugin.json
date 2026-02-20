@@ -20,9 +20,17 @@
         "type": "string",
         "description": "Default API base URL for Chatu service"
       },
+      "channelId": {
+        "type": "string",
+        "description": "Channel ID from the Chatu service"
+      },
+      "secret": {
+        "type": "string",
+        "description": "Channel secret for registration (wh_secret_xxx)"
+      },
       "accessToken": {
         "type": "string",
-        "description": "Default access token for authentication"
+        "description": "Access token (auto-obtained via register, or set manually)"
       },
       "timeout": {
         "type": "number",
