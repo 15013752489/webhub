@@ -172,11 +172,6 @@ export default function (api: OpenClawPluginApi) {
     } catch (_) { /* best-effort */ }
   }
 
-  // Kick off default account lifecycle (non-blocking)
-  registerAndConnect().catch((err) =>
-    api.logger.error(`[chatu] registerAndConnect uncaught error: ${String(err)}`),
-  );
-
   // ── Inbound: deliver AI reply back to service ────────────────────────────────
 
   async function deliverOutbound(params: {
@@ -186,6 +181,8 @@ export default function (api: OpenClawPluginApi) {
     replyTo?: string | null;
     mediaUrl?: string;
     mediaType?: string;
+    messageType?: string;
+    metadata?: Record<string, unknown>;
   }): Promise<{ ok: boolean; messageId?: string; error?: string }> {
     const cfg = getAccountConfig(params.accountId);
     if (!cfg.apiUrl || !cfg.accessToken) {
@@ -203,6 +200,8 @@ export default function (api: OpenClawPluginApi) {
     if (params.mediaUrl) {
       payload.media = [{ type: params.mediaType ?? 'file', url: params.mediaUrl }];
     }
+    if (params.messageType) payload.messageType = params.messageType;
+    if (params.metadata) payload.metadata = params.metadata;
 
     try {
       const resp = await timedFetch(
@@ -212,7 +211,7 @@ export default function (api: OpenClawPluginApi) {
           headers: {
             'Content-Type': 'application/json',
             'X-Channel-Token': cfg.accessToken,
-            'X-Channel-ID': params.accountId ?? cfg.channelId ?? 'default',
+            'X-Channel-ID': cfg.channelId,
           },
           body: JSON.stringify(payload),
         },
@@ -354,16 +353,20 @@ export default function (api: OpenClawPluginApi) {
     log?: ChannelLogSink;
   }): Promise<void> {
     const { accountId, abortSignal } = ctx;
-    const cfg = getAccountConfig(accountId);
 
-    if (!cfg.apiUrl || !cfg.accessToken) {
-      ctx.log?.error?.(`[${accountId}] chatu: missing apiUrl or accessToken for polling`);
+    // Pre-flight check
+    const initCfg = getAccountConfig(accountId);
+    if (!initCfg.apiUrl) {
+      ctx.log?.error?.(`[${accountId}] chatu: missing apiUrl for polling`);
       return;
     }
 
     let lastCursor = '';
     let consecutiveErrors = 0;
     const MAX_ERRORS = 10;
+    // Track processed message IDs to handle same-millisecond createdAt duplicates
+    const processedIds = new Set<string>();
+    const MAX_PROCESSED_IDS = 500;
 
     ctx.setStatus({ accountId: ctx.accountId, connected: true });
     ctx.log?.info?.(`[${accountId}] chatu: polling started`);
@@ -379,6 +382,14 @@ export default function (api: OpenClawPluginApi) {
       if (abortSignal.aborted) break;
 
       try {
+        // Re-read config each iteration so a refreshed accessToken is picked up
+        const cfg = getAccountConfig(accountId);
+        if (!cfg.accessToken) {
+          consecutiveErrors++;
+          api.logger.warn(`[chatu] No accessToken yet (account=${accountId}), retrying...`);
+          continue;
+        }
+
         const url =
           `${cfg.apiUrl}/api/channel/messages/pending` +
           `?channelId=${encodeURIComponent(cfg.channelId)}` +
@@ -411,10 +422,34 @@ export default function (api: OpenClawPluginApi) {
         const messages: any[] = data?.data ?? [];
 
         for (const msg of messages) {
-          lastCursor = msg.id ?? lastCursor;
+          // Advance ISO timestamp cursor so next poll fetches only newer messages
+          if (msg.createdAt) lastCursor = msg.createdAt as string;
+
+          // Skip messages already processed in-memory (handles same-ms duplicates)
+          if (processedIds.has(msg.id)) continue;
+          processedIds.add(msg.id);
+          // Bound set growth
+          if (processedIds.size > MAX_PROCESSED_IDS) {
+            const first = processedIds.values().next().value;
+            if (first !== undefined) processedIds.delete(first);
+          }
 
           // Ack first (idempotency)
           await ackMessage(cfg.apiUrl, cfg.accessToken, msg.id, cfg.timeout);
+
+          // T099: send typing indicator before dispatching to AI
+          const typingChannelId = msg.channelId ?? cfg.channelId;
+          if (typingChannelId) {
+            timedFetch(
+              `${cfg.apiUrl}/api/channel/typing`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Channel-Token': cfg.accessToken },
+                body: JSON.stringify({ channelId: typingChannelId }),
+              },
+              3000,
+            ).catch(() => { /* best-effort */ });
+          }
 
           const freshCfg = api.config ?? {};
           await dispatchUserMessage({
@@ -461,12 +496,12 @@ export default function (api: OpenClawPluginApi) {
     capabilities: {
       chatTypes: ['direct', 'group'] as Array<'direct' | 'group'>,
       reply: true,
-      edit: false,
-      unsend: false,
-      reactions: false,
+      edit: true,
+      unsend: true,
+      reactions: true,
       polls: false,
       media: true,
-      threads: false,
+      threads: true,
       blockStreaming: false,
     },
 
@@ -765,6 +800,42 @@ export default function (api: OpenClawPluginApi) {
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send media (to=${to}): ${result.error}`);
           throw new Error(result.error ?? 'sendMedia failed');
+        }
+        return { channel: CHANNEL_ID, messageId: result.messageId ?? '' };
+      },
+
+      // T098: send a rich payload (richCard, structured content)
+      sendPayload: async (ctx: any) => {
+        const { to, accountId, replyToId, messageType, metadata, text } = ctx;
+        const result = await deliverOutbound({
+          text: text ?? '',
+          target: to,
+          accountId,
+          replyTo: replyToId,
+          messageType,
+          metadata,
+        });
+        if (!result.ok) {
+          api.logger.error(`[chatu] Failed to send payload (to=${to}): ${result.error}`);
+          throw new Error(result.error ?? 'sendPayload failed');
+        }
+        return { channel: CHANNEL_ID, messageId: result.messageId ?? '' };
+      },
+
+      // T098: send a poll message
+      sendPoll: async (ctx: any) => {
+        const { to, accountId, replyToId, question, options, multiple } = ctx;
+        const result = await deliverOutbound({
+          text: question ?? 'Poll',
+          target: to,
+          accountId,
+          replyTo: replyToId,
+          messageType: 'poll',
+          metadata: { poll: { question, options, multiple: multiple ?? false } },
+        });
+        if (!result.ok) {
+          api.logger.error(`[chatu] Failed to send poll (to=${to}): ${result.error}`);
+          throw new Error(result.error ?? 'sendPoll failed');
         }
         return { channel: CHANNEL_ID, messageId: result.messageId ?? '' };
       },
