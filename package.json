@@ -16,7 +16,10 @@
       "docsLabel": "chatu",
       "blurb": "Connect to any website via HTTP/WebSocket",
       "order": 60,
-      "aliases": ["chatu", "http-channel"]
+      "aliases": [
+        "chatu",
+        "http-channel"
+      ]
     },
     "install": {
       "npmSpec": "@openclaw/chatu",
@@ -28,7 +31,8 @@
     "watch": "tsc --watch",
     "check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "test": "jest --no-coverage"
   },
   "keywords": [
     "openclaw",
@@ -56,8 +60,12 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
+    "jest": "^30.2.0",
+    "openclaw": "2026.2.19-2",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.3.0"
   }
 }
