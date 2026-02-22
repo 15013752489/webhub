@@ -25,6 +25,7 @@ import type {
   ChannelSetupInput,
   ChannelLogSink,
 } from 'openclaw/plugin-sdk';
+import pkg from '../package.json';
 
 /** Resolved per-account configuration for the Chatu channel. */
 export interface ChatuAccount {
@@ -140,12 +141,12 @@ export default function (api: OpenClawPluginApi) {
               'Content-Type': 'application/json',
               'x-access-token': refreshed.accessToken,
             },
-            body: JSON.stringify({ channelId: refreshed.channelId }),
+            body: JSON.stringify({ channelId: refreshed.channelId, pluginVersion: pkg.version }),
           },
           refreshed.timeout,
         );
         if (resp.ok) {
-          api.logger.info(`[chatu] Channel connected (channelId=${refreshed.channelId})`);
+          api.logger.info(`[chatu] Channel connected (channelId=${refreshed.channelId}, v${pkg.version})`);  
         }
       } catch (err) {
         api.logger.warn(`[chatu] Connect request failed: ${String(err)}`);
@@ -735,6 +736,7 @@ export default function (api: OpenClawPluginApi) {
     // ── Gateway (long-running per-account connection) ─────────────────────────
     gateway: {
       startAccount: async (ctx: ChannelGatewayContext<ChatuAccount>): Promise<void> => {
+        api.logger.info(`[chatu] WebHub channel plugin v${pkg.version} starting`);
         await registerAndConnect(ctx.accountId);
         await pollLoop({
           accountId:   ctx.accountId,

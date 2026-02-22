@@ -260,3 +260,52 @@ openclaw extensions update --check
 ---
 
 *Last updated: 2026-02-06*
+
+---
+
+## Plugin Version Detection
+
+After installing or upgrading the plugin, you can verify the active version without restarting openclaw by querying the service version endpoint:
+
+```bash
+# Check active plugin version
+curl http://localhost:3000/api/channel/version
+```
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "serviceVersion": "1.0.0",
+    "nodeVersion": "20.11.0",
+    "pluginVersion": "0.1.0",
+    "buildTime": null
+  }
+}
+```
+
+`pluginVersion` reflects the version reported by the plugin when it last connected. If it shows `null`, the plugin has not yet connected after the most recent service restart.
+
+---
+
+## Reloading the Plugin After an Upgrade
+
+Use the included reload script to rebuild and get guided reload instructions:
+
+```bash
+./scripts/reload-plugin.sh
+```
+
+The script will:
+1. Run `npm run build` to compile the plugin
+2. Print the new version
+3. Check the service version endpoint
+4. Show step-by-step instructions for clearing the cached `accessToken` and restarting the openclaw account so the new build takes effect
+
+To reload without rebuilding:
+
+```bash
+./scripts/reload-plugin.sh --no-build
+```
