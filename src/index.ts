@@ -1087,12 +1087,22 @@ export default function (api: OpenClawPluginApi) {
 
       sendMedia: async (ctx) => {
         const { to, mediaUrl, text, accountId, replyToId } = ctx;
+        // Infer mediaType from URL extension since ChannelOutboundContext has no mediaType field
+        const inferMediaType = (url?: string): string => {
+          if (!url) return 'file';
+          const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) return 'image';
+          if (['mp4', 'webm', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
+          if (['mp3', 'wav', 'aac', 'flac', 'm4a'].includes(ext)) return 'audio';
+          return 'file';
+        };
         const result = await deliverOutbound({
           text: text ?? '',
           target: to,
           accountId,
           replyTo: replyToId,
           mediaUrl,
+          mediaType: inferMediaType(mediaUrl),
         });
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send media (to=${to}): ${result.error}`);
