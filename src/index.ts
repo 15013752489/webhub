@@ -26,6 +26,9 @@ import type {
   ChannelLogSink,
 } from 'openclaw/plugin-sdk';
 import pkg from '../package.json';
+import { WebSocketAdapter } from './sdk/adapters/websocket';
+import { MessageCache } from './sdk/adapters/cache';
+import type { InboundMessage } from './sdk/types/channel';
 
 /** Resolved per-account configuration for the Chatu channel. */
 export interface ChatuAccount {
@@ -58,6 +61,26 @@ export default function (api: OpenClawPluginApi) {
   // ── Config helpers ──────────────────────────────────────────────────────────
 
   api.logger.info('[chatu] Initializing channel plugin');
+
+  // ── T015 Plugin-Channel Realtime: per-account outbound message caches ───────
+  /** Stores failed AI replies for retry on reconnect. One per account. */
+  const accountCaches = new Map<string, MessageCache>();
+
+  function getAccountCache(accountId: string): MessageCache {
+    if (!accountCaches.has(accountId)) {
+      accountCaches.set(
+        accountId,
+        new MessageCache({
+          logger: api.logger,
+          maxCapacity: process.env.CHATU_CACHE_MAX ? parseInt(process.env.CHATU_CACHE_MAX, 10) : 1000,
+          filePath: process.env.CHATU_CACHE_FILE
+            ? `${process.env.CHATU_CACHE_FILE}.${accountId}.json`
+            : undefined,
+        }),
+      );
+    }
+    return accountCaches.get(accountId)!;
+  }
 
 
   // ── Config helpers ──────────────────────────────────────────────────────────
@@ -96,6 +119,60 @@ export default function (api: OpenClawPluginApi) {
   }
 
   // ── Lifecycle: register + connect ─────────────────────────────────────────────
+
+  /**
+   * T023 Plugin-Channel Realtime: If CHATU_KEY and CHATU_URL env vars are set,
+   * call POST /api/channel/quick-register to obtain credentials automatically.
+   * This runs BEFORE registerAndConnect so WS setup (T012) can use the credentials.
+   * Skipped if channelId + accessToken are already configured.
+   */
+  async function quickRegisterIfNeeded(accountId?: string | null): Promise<void> {
+    const key = process.env.CHATU_KEY;
+    const apiUrl = process.env.CHATU_URL ?? process.env.CHATU_API_URL;
+    if (!key || !apiUrl) return;
+
+    // If already have credentials, skip
+    const cfg = getAccountConfig(accountId);
+    if (cfg.channelId && cfg.accessToken) return;
+
+    try {
+      const resp = await timedFetch(
+        `${apiUrl}/api/channel/quick-register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, url: apiUrl }),
+        },
+        DEFAULT_TIMEOUT_MS,
+      );
+
+      if (resp.ok) {
+        const data = await resp.json();
+        const channelId: string | undefined = data?.data?.channelId;
+        const accessToken: string | undefined = data?.data?.accessToken;
+
+        if (channelId && accessToken) {
+          const base = accountId
+            ? `channels.chatu.accounts.${accountId}`
+            : 'channels.chatu';
+          try {
+            await (api as any).config?.set?.(`${base}.channelId`, channelId);
+            await (api as any).config?.set?.(`${base}.accessToken`, accessToken);
+            await (api as any).config?.set?.(`${base}.apiUrl`, apiUrl);
+          } catch (_) { /* config persistence optional */ }
+          api.logger.info(
+            `[chatu] Quick-registered via CHATU_KEY (channelId=${channelId}, account=${accountId ?? 'default'})`,
+          );
+        }
+      } else {
+        api.logger.warn(
+          `[chatu] Quick-register returned HTTP ${resp.status} — check CHATU_KEY/CHATU_URL`,
+        );
+      }
+    } catch (err) {
+      api.logger.warn(`[chatu] Quick-register failed: ${String(err)}`);
+    }
+  }
 
   async function registerAndConnect(accountId?: string | null): Promise<void> {
     const cfg = getAccountConfig(accountId);
@@ -203,6 +280,8 @@ export default function (api: OpenClawPluginApi) {
     }
     if (params.messageType) payload.messageType = params.messageType;
     if (params.metadata) payload.metadata = params.metadata;
+    // Phase 11 T049: always stamp role:'ai' so the service can persist the correct author role
+    payload.role = 'ai';
 
     try {
       const resp = await timedFetch(
@@ -305,6 +384,17 @@ export default function (api: OpenClawPluginApi) {
             });
             if (!result.ok) {
               api.logger.error(`[chatu] Failed to deliver AI reply (target=${senderId}): ${result.error}`);
+              // T015 Plugin-Channel Realtime: cache failed delivery for retry on reconnect
+              const cfg2 = getAccountConfig(accountId);
+              const cache = getAccountCache(accountId);
+              const cacheId = result.messageId ?? `retry_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+              cache.enqueue({
+                id: cacheId,
+                channelId: cfg2.channelId,
+                content: { text, target: senderId, replyTo: payload.replyToId ?? id },
+                enqueuedAt: Date.now(),
+                status: 'pending',
+              });
             }
           },
           onError: (err: unknown, info: { kind: string }) => {
@@ -343,6 +433,143 @@ export default function (api: OpenClawPluginApi) {
   }
 
   /**
+   * Plugin-Channel Realtime (T012): WebSocket-based gateway loop.
+   * Replaces HTTP polling. Connects to /api/channel/ws via WebSocketAdapter
+   * and dispatches inbound messages to the OpenClaw AI pipeline.
+   * Reconnects automatically with infinite exponential back-off (T009).
+   *
+   * Runs until `abortSignal` fires.
+   */
+  async function wsConnectionLoop(ctx: {
+    accountId: string;
+    abortSignal: AbortSignal;
+    setStatus: (s: ChannelAccountSnapshot) => void;
+    log?: ChannelLogSink;
+  }): Promise<void> {
+    const cfg = getAccountConfig(ctx.accountId);
+
+    if (!cfg.apiUrl) {
+      ctx.log?.error?.(`[${ctx.accountId}] chatu: missing apiUrl for WS connection`);
+      return;
+    }
+    if (!cfg.accessToken || !cfg.channelId) {
+      ctx.log?.error?.(`[${ctx.accountId}] chatu: missing accessToken/channelId for WS connection`);
+      return;
+    }
+
+    // Convert HTTP URL to WebSocket URL scheme
+    const wsBase = cfg.apiUrl
+      .replace(/^https:\/\//, 'wss://')
+      .replace(/^http:\/\//, 'ws://');
+
+    const adapter = new WebSocketAdapter({
+      channelId: cfg.channelId,
+      accessToken: cfg.accessToken,
+      webhubUrl: `${wsBase}/api/channel/ws`,
+    });
+
+    // Register inbound message handler — dispatches user messages to AI
+    adapter.onMessage(async (msg: InboundMessage) => {
+      const text = msg.content?.text?.trim() ?? '';
+      if (!text) return;
+
+      // Phase 11 T048: role:agent frames originate from the human operator (webhub frontend).
+      // Instead of running through the AI pipeline, forward them into OpenClaw as an agent message.
+      if ((msg as any).role === 'agent') {
+        try {
+          if (typeof (api as any).dispatch === 'function') {
+            const agentCfg = getAccountConfig(ctx.accountId);
+            await (api as any).dispatch({
+              channel: agentCfg.channelId,
+              accountId: ctx.accountId,
+              from: (msg as any).sender?.id ?? 'agent',
+              text,
+              messageId: msg.id,
+              metadata: { role: 'agent', ...((msg as any).metadata ?? {}) },
+            });
+          } else {
+            api.logger.warn('[chatu] api.dispatch not available; cannot forward agent message to OpenClaw');
+          }
+        } catch (err) {
+          api.logger.error(`[chatu] Error dispatching agent message: ${String(err)}`);
+        }
+        return;
+      }
+
+      const freshCfg = api.config ?? {};
+      await dispatchUserMessage({
+        id: msg.id,
+        content: text,
+        senderId: msg.sender.id,
+        senderName: msg.sender.displayName,
+        timestamp: msg.timestamp,
+        accountId: ctx.accountId,
+        cfg: freshCfg,
+      });
+    });
+
+    // Track connection status → surface to OpenClaw gateway
+    adapter.onStatusChange((status, err) => {
+      if (status === 'connected') {
+        ctx.setStatus({ accountId: ctx.accountId, connected: true });
+        ctx.log?.info?.(`[${ctx.accountId}] chatu: WebSocket connected`);
+      } else if (status === 'disconnected') {
+        ctx.setStatus({ accountId: ctx.accountId, connected: false });
+      } else if (status === 'error') {
+        ctx.setStatus({
+          accountId: ctx.accountId,
+          connected: false,
+          lastError: err?.message ?? 'WS error',
+        });
+      }
+    });
+
+    // T015 Plugin-Channel Realtime: flush cached failed deliveries on reconnect
+    adapter.onReconnected(async () => {
+      const cache = getAccountCache(ctx.accountId);
+      if (cache.pendingCount === 0) return;
+      api.logger.info(
+        `[chatu] Reconnected — flushing ${cache.pendingCount} cached messages (account=${ctx.accountId})`,
+      );
+      await cache.flush(async (cachedMsg) => {
+        const payload = cachedMsg.content as { text: string; target: string; replyTo?: string };
+        const result = await deliverOutbound({
+          text: payload.text ?? '',
+          target: payload.target ?? '',
+          accountId: ctx.accountId,
+          replyTo: payload.replyTo,
+        });
+        if (!result.ok) {
+          throw new Error(result.error ?? 'Cached delivery failed');
+        }
+        cache.ack(cachedMsg.id);
+      });
+    });
+
+    ctx.setStatus({ accountId: ctx.accountId, connected: false });
+    ctx.log?.info?.(`[${ctx.accountId}] chatu: starting WebSocket connection to ${wsBase}/api/channel/ws`);
+
+    // Attempt initial connect (adapter auto-reconnects indefinitely on failure)
+    try {
+      await adapter.connect();
+    } catch (err) {
+      api.logger.warn(`[chatu] Initial WS connect failed (account=${ctx.accountId}): ${String(err)}`);
+      // Adapter will keep retrying — proceed to wait for abort
+    }
+
+    // Hold until the gateway signals shutdown
+    await new Promise<void>((resolve) => {
+      if (ctx.abortSignal.aborted) { resolve(); return; }
+      ctx.abortSignal.addEventListener('abort', () => resolve(), { once: true });
+    });
+
+    ctx.log?.info?.(`[${ctx.accountId}] chatu: WebSocket connection stopping`);
+    await adapter.disconnect();
+    ctx.setStatus({ accountId: ctx.accountId, connected: false });
+  }
+
+  /**
+   * @deprecated Use wsConnectionLoop instead (Plugin-Channel Realtime T012).
    * Long-running poll loop for the gateway.
    * Polls the WebHub service for new user messages and dispatches them to OpenClaw AI.
    * Runs until `abortSignal` fires.
@@ -737,8 +964,11 @@ export default function (api: OpenClawPluginApi) {
     gateway: {
       startAccount: async (ctx: ChannelGatewayContext<ChatuAccount>): Promise<void> => {
         api.logger.info(`[chatu] WebHub channel plugin v${pkg.version} starting`);
+        // T023: quick-register via env vars if no credentials configured
+        await quickRegisterIfNeeded(ctx.accountId);
         await registerAndConnect(ctx.accountId);
-        await pollLoop({
+        // Plugin-Channel Realtime (T012): use WebSocket instead of HTTP polling
+        await wsConnectionLoop({
           accountId:   ctx.accountId,
           abortSignal: ctx.abortSignal,
           setStatus:   ctx.setStatus,

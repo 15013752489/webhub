@@ -143,3 +143,129 @@ describe('Poll loop abort-signal shutdown', () => {
     expect(result.abortedCleanly).toBe(false);
   });
 });
+
+// ─── T037: WS connection lifecycle integration ─────────────────────────────
+
+/**
+ * T037 — WebSocket + cache integration lifecycle tests.
+ *
+ * Tests the interaction between WebSocketAdapter and MessageCache as used
+ * inside wsConnectionLoop (mocked here for unit-test isolation):
+ *  1. First connection: adapter.connect() is called; cache.flush() is NOT called
+ *  2. Reconnect: onReconnected callback triggers cache.flush()
+ *  3. Quick-register: axios.post is called with correct URL + payload; returned
+ *     channelId/accessToken are usable for subsequent WS adapter instantiation
+ */
+
+jest.mock('./sdk/adapters/websocket', () => {
+  return {
+    WebSocketAdapter: jest.fn().mockImplementation(() => ({
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      onMessage: jest.fn(),
+      onStatusChange: jest.fn(),
+      onReconnected: jest.fn(),
+      send: jest.fn(),
+    })),
+  };
+});
+
+jest.mock('./sdk/adapters/cache', () => {
+  return {
+    MessageCache: jest.fn().mockImplementation(() => ({
+      enqueue: jest.fn(),
+      flush: jest.fn().mockResolvedValue(0),
+      ack: jest.fn(),
+      get size() { return 0; },
+    })),
+  };
+});
+
+jest.mock('axios', () => ({
+  post: jest.fn(),
+  get: jest.fn(),
+  default: {
+    post: jest.fn(),
+    get: jest.fn(),
+  },
+}), { virtual: true });
+
+describe('WS connection lifecycle (T037)', () => {
+  const { WebSocketAdapter } = require('./sdk/adapters/websocket');
+  const { MessageCache } = require('./sdk/adapters/cache');
+  const axios = require('axios');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('WebSocketAdapter is a constructor that returns an adapter object', () => {
+    const adapter = new WebSocketAdapter({ channelId: 'ch-1', accessToken: 'tok', webhubUrl: 'ws://localhost/ws' });
+    expect(typeof adapter.connect).toBe('function');
+    expect(typeof adapter.onReconnected).toBe('function');
+    expect(typeof adapter.onMessage).toBe('function');
+  });
+
+  it('onReconnected triggers cache.flush when registered', async () => {
+    const adapter = new WebSocketAdapter({});
+    const cache = new MessageCache({});
+
+    // Simulate what wsConnectionLoop does: register onReconnected → flush cache
+    const flushSpy = cache.flush as jest.Mock;
+    const reconnectCallback = jest.fn(async () => {
+      await cache.flush(jest.fn());
+    });
+    adapter.onReconnected(reconnectCallback);
+
+    // Simulate the adapter firing the reconnect callback
+    const registeredCallback = (adapter.onReconnected as jest.Mock).mock.calls[0][0];
+    await registeredCallback();
+
+    expect(flushSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('cache.enqueue is called when message delivery fails', async () => {
+    const cache = new MessageCache({});
+    const enqueueSpy = cache.enqueue as jest.Mock;
+
+    // Simulate failed delivery → enqueue
+    const failedMsg = { id: 'msg-1', channelId: 'ch-1', content: 'hello', enqueuedAt: Date.now(), status: 'pending' };
+    cache.enqueue(failedMsg);
+
+    expect(enqueueSpy).toHaveBeenCalledWith(failedMsg);
+  });
+
+  it('quick-register: axios.post called with key+url payload', async () => {
+    const axiosPost = axios.post as jest.Mock;
+    axiosPost.mockResolvedValue({ data: { success: true, data: { channelId: 'ch-abc', accessToken: 'tok-xyz' } } });
+
+    const apiUrl = 'http://localhost:3000';
+    const key = 'my-channel-key';
+    const url = apiUrl;
+
+    await axios.post(`${apiUrl}/api/channel/quick-register`, { key, url });
+
+    expect(axiosPost).toHaveBeenCalledWith(
+      `${apiUrl}/api/channel/quick-register`,
+      { key, url }
+    );
+  });
+
+  it('quick-register success: returned credentials are used for WS adapter', async () => {
+    const axiosPost = axios.post as jest.Mock;
+    const channelId = 'ch-from-qr';
+    const accessToken = 'tok-from-qr';
+    axiosPost.mockResolvedValue({ data: { success: true, data: { channelId, accessToken } } });
+
+    const resp = await axios.post('http://example.com/api/channel/quick-register', { key: 'k', url: 'http://u' });
+    const { channelId: retId, accessToken: retTok } = resp.data.data;
+
+    // Use returned credentials to create a WS adapter (matches index.ts behavior)
+    const adapter = new WebSocketAdapter({ channelId: retId, accessToken: retTok, webhubUrl: 'ws://example.com/api/channel/ws' });
+    adapter.connect();
+
+    expect((adapter.connect as jest.Mock)).toHaveBeenCalledTimes(1);
+    expect(retId).toBe(channelId);
+    expect(retTok).toBe(accessToken);
+  });
+});

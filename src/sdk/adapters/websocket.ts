@@ -73,6 +73,12 @@ export class WebSocketAdapter implements ConnectionAdapter {
   
   /** 重连次数 [Channel SDK 标准] */
   private reconnectAttempts: number = 0;
+
+  /** Plugin-Channel Realtime: whether first connect has succeeded */
+  private _wasConnected: boolean = false;
+
+  /** Plugin-Channel Realtime: callbacks fired on every successful reconnect (not initial connect) */
+  private reconnectedCallbacks: Set<() => void> = new Set();
   
   /** 统计 [Channel SDK 标准] */
   private stats: ChannelStats = {
@@ -89,7 +95,8 @@ export class WebSocketAdapter implements ConnectionAdapter {
     this.config = {
       heartbeatInterval: 30000,
       heartbeatTimeout: 10000,
-      maxReconnectAttempts: 3,
+      // Plugin-Channel Realtime: Infinity = unlimited retries (prod default)
+      maxReconnectAttempts: Infinity,
       ...config,
     };
   }
@@ -118,6 +125,11 @@ export class WebSocketAdapter implements ConnectionAdapter {
         this.stats.connectedDuration = Date.now();
         this.startHeartbeat();
         this.notifyStatus('connected');
+        // Plugin-Channel Realtime: fire onReconnected on reconnect (not initial connect)
+        if (this._wasConnected) {
+          this.reconnectedCallbacks.forEach(cb => cb());
+        }
+        this._wasConnected = true;
         resolve();
       };
       
@@ -210,6 +222,14 @@ export class WebSocketAdapter implements ConnectionAdapter {
     this.messageCallbacks.add(callback);
   }
   
+  /**
+   * Plugin-Channel Realtime: Register a callback fired on every successful reconnect.
+   * Alias for onopen after the first connection. Use this for cache flush.
+   */
+  onReconnected(callback: () => void): void {
+    this.reconnectedCallbacks.add(callback);
+  }
+
   /**
    * 订阅状态变化 [Channel SDK 标准]
    */
@@ -320,15 +340,16 @@ export class WebSocketAdapter implements ConnectionAdapter {
    * 尝试重连 [Channel SDK 标准]
    */
   private attemptReconnect(): void {
-    const maxAttempts = this.config.maxReconnectAttempts ?? 3;
-    if (this.reconnectAttempts >= maxAttempts) {
+    const maxAttempts = this.config.maxReconnectAttempts ?? Infinity;
+    // Plugin-Channel Realtime: support Infinity (unlimited retries)
+    if (maxAttempts !== Infinity && this.reconnectAttempts >= maxAttempts) {
       this._status = 'error';
       this.notifyStatus('error', new Error('重连次数过多'));
       return;
     }
     
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
     
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(() => {});

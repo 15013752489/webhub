@@ -25,6 +25,10 @@ export enum MessageType {
   AUDIO = 'audio',
   FILE = 'file',
   LOCATION = 'location',
+  /** Plugin-Channel Realtime: operation/command type */
+  ACTION = 'action',
+  /** Plugin-Channel Realtime: unrecognised type, frontend renders placeholder */
+  UNKNOWN = 'unknown',
 }
 
 /**
@@ -228,6 +232,9 @@ export interface ConnectionConfig {
   
   /** 最大重连次数 [Channel SDK 标准] */
   maxReconnectAttempts?: number;
+
+  /** Plugin-Channel Realtime: connection mode, 'user' | 'group' (future) */
+  mode?: 'user' | 'group';
 }
 
 /**
