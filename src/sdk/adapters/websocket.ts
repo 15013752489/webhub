@@ -349,7 +349,10 @@ export class WebSocketAdapter implements ConnectionAdapter {
     }
     
     this.reconnectAttempts++;
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    // T008 Plugin-Channel SSE: exponential backoff with ±20% jitter
+    // delay = min(1000 × 2^n, 30000) × (0.8 + random × 0.4)
+    const baseDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
     
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(() => {});

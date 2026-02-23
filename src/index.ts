@@ -308,6 +308,81 @@ export default function (api: OpenClawPluginApi) {
     }
   }
 
+  // ── Streaming relay helpers (T042) ────────────────────────────────────────
+
+  /**
+   * Relay a single streaming chunk to the WebHub API.
+   * Called by the outbound.sendStreamChunk handler when OpenClaw AI streams.
+   */
+  async function deliverStreamChunk(params: {
+    messageId: string;
+    seq: number;
+    delta: string;
+    accountId?: string | null;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const cfg = getAccountConfig(params.accountId);
+    if (!cfg.apiUrl || !cfg.accessToken) {
+      return { ok: false, error: 'Missing apiUrl or accessToken' };
+    }
+    try {
+      const resp = await timedFetch(
+        `${cfg.apiUrl}/api/channel/stream/chunk`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${cfg.accessToken}`,
+          },
+          body: JSON.stringify({ messageId: params.messageId, seq: params.seq, delta: params.delta }),
+        },
+        cfg.timeout,
+      );
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  }
+
+  /**
+   * Signal streaming completion to the WebHub API.
+   * Called by the outbound.sendStreamDone handler when OpenClaw AI finishes.
+   */
+  async function deliverStreamDone(params: {
+    messageId: string;
+    totalSeq: number;
+    accountId?: string | null;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const cfg = getAccountConfig(params.accountId);
+    if (!cfg.apiUrl || !cfg.accessToken) {
+      return { ok: false, error: 'Missing apiUrl or accessToken' };
+    }
+    try {
+      const resp = await timedFetch(
+        `${cfg.apiUrl}/api/channel/stream/done`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${cfg.accessToken}`,
+          },
+          body: JSON.stringify({ messageId: params.messageId, totalSeq: params.totalSeq }),
+        },
+        cfg.timeout,
+      );
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+      }
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) };
+    }
+  }
+
   // ── Gateway: poll + dispatch inbound user messages ───────────────────────────
 
   /**
@@ -1061,6 +1136,25 @@ export default function (api: OpenClawPluginApi) {
         }
         return { channel: CHANNEL_ID, messageId: result.messageId ?? '' };
       },
+
+      // T042: streaming relay — forward AI stream chunks/done to WebHub API
+      sendStreamChunk: async (ctx: any) => {
+        const { messageId, seq, delta, accountId } = ctx;
+        const result = await deliverStreamChunk({ messageId, seq, delta, accountId });
+        if (!result.ok) {
+          api.logger.warn(`[chatu] stream chunk relay failed (messageId=${messageId}): ${result.error}`);
+        }
+        return result;
+      },
+
+      sendStreamDone: async (ctx: any) => {
+        const { messageId, totalSeq, accountId } = ctx;
+        const result = await deliverStreamDone({ messageId, totalSeq, accountId });
+        if (!result.ok) {
+          api.logger.warn(`[chatu] stream done relay failed (messageId=${messageId}): ${result.error}`);
+        }
+        return result;
+      },
     },
   };
 
@@ -1100,4 +1194,86 @@ export function computeBackoffMs(
   maxMs: number = MAX_BACKOFF_MS,
 ): number {
   return Math.min(baseMs * Math.pow(2, consecutiveErrors), maxMs);
+}
+
+/**
+ * T042 testable export: relay a streaming AI chunk to the WebHub API.
+ *
+ * @param apiUrl      - WebHub service base URL
+ * @param accessToken - Channel access token (Bearer)
+ * @param messageId   - Unique ID for the streaming message
+ * @param seq         - 0-based sequential chunk index
+ * @param delta       - Text delta for this chunk
+ * @param timeoutMs   - Fetch timeout in milliseconds
+ */
+export async function relayStreamChunk(
+  apiUrl: string,
+  accessToken: string,
+  messageId: string,
+  seq: number,
+  delta: string,
+  timeoutMs: number = 30_000,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const resp = await fetch(`${apiUrl}/api/channel/stream/chunk`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ messageId, seq, delta }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    clearTimeout(timer);
+    return { ok: false, error: String(err?.message ?? err) };
+  }
+}
+
+/**
+ * T042 testable export: signal streaming completion to the WebHub API.
+ *
+ * @param apiUrl      - WebHub service base URL
+ * @param accessToken - Channel access token (Bearer)
+ * @param messageId   - Unique ID for the streaming message
+ * @param totalSeq    - Total number of chunks sent
+ * @param timeoutMs   - Fetch timeout in milliseconds
+ */
+export async function relayStreamDone(
+  apiUrl: string,
+  accessToken: string,
+  messageId: string,
+  totalSeq: number,
+  timeoutMs: number = 30_000,
+): Promise<{ ok: boolean; error?: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const resp = await fetch(`${apiUrl}/api/channel/stream/done`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ messageId, totalSeq }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+    }
+    return { ok: true };
+  } catch (err: any) {
+    clearTimeout(timer);
+    return { ok: false, error: String(err?.message ?? err) };
+  }
 }

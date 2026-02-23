@@ -269,3 +269,164 @@ describe('WS connection lifecycle (T037)', () => {
     expect(retTok).toBe(accessToken);
   });
 });
+
+// ─── T042: Streaming relay (relayStreamChunk / relayStreamDone) ────────────
+
+import { relayStreamChunk, relayStreamDone } from './index';
+
+describe('Streaming relay (T042)', () => {
+  const API_URL = 'http://localhost:3000';
+  const ACCESS_TOKEN = 'wh_test_token_abc';
+  const MESSAGE_ID = 'msg-stream-001';
+
+  let mockFetch: jest.Mock;
+
+  beforeEach(() => {
+    mockFetch = jest.fn();
+    (global as any).fetch = mockFetch;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // ── relayStreamChunk ──────────────────────────────────────────────────────
+
+  describe('relayStreamChunk', () => {
+    it('POSTs chunk to /api/channel/stream/chunk with Bearer token', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true }),
+        text: async () => '',
+      });
+
+      const result = await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 0, 'Hello ');
+
+      expect(result.ok).toBe(true);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${API_URL}/api/channel/stream/chunk`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({ messageId: MESSAGE_ID, seq: 0, delta: 'Hello ' }),
+        }),
+      );
+    });
+
+    it('returns ok: false when server responds with non-2xx', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => '{"error":"INVALID_TOKEN"}',
+      });
+
+      const result = await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 1, 'world');
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('401');
+    });
+
+    it('returns ok: false when fetch throws (network error)', async () => {
+      mockFetch.mockRejectedValue(new Error('Network failure'));
+
+      const result = await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 0, 'test');
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Network failure');
+    });
+
+    it('sends seq and delta correctly for each chunk index', async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
+
+      await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 5, 'delta-chunk');
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(callBody.seq).toBe(5);
+      expect(callBody.delta).toBe('delta-chunk');
+      expect(callBody.messageId).toBe(MESSAGE_ID);
+    });
+  });
+
+  // ── relayStreamDone ───────────────────────────────────────────────────────
+
+  describe('relayStreamDone', () => {
+    it('POSTs to /api/channel/stream/done with Bearer token', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        text: async () => '',
+      });
+
+      const result = await relayStreamDone(API_URL, ACCESS_TOKEN, MESSAGE_ID, 3);
+
+      expect(result.ok).toBe(true);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        `${API_URL}/api/channel/stream/done`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${ACCESS_TOKEN}`,
+          }),
+          body: JSON.stringify({ messageId: MESSAGE_ID, totalSeq: 3 }),
+        }),
+      );
+    });
+
+    it('returns ok: false when server responds with non-2xx', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => '{"error":"MISSING_FIELDS"}',
+      });
+
+      const result = await relayStreamDone(API_URL, ACCESS_TOKEN, MESSAGE_ID, 3);
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('400');
+    });
+
+    it('returns ok: false when fetch throws', async () => {
+      mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+
+      const result = await relayStreamDone(API_URL, ACCESS_TOKEN, MESSAGE_ID, 5);
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toBeDefined();
+    });
+
+    it('sends totalSeq correctly', async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
+
+      await relayStreamDone(API_URL, ACCESS_TOKEN, MESSAGE_ID, 7);
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(callBody.totalSeq).toBe(7);
+      expect(callBody.messageId).toBe(MESSAGE_ID);
+    });
+  });
+
+  // ── Sequential chunk→done relay ───────────────────────────────────────────
+
+  describe('sequential chunk + done relay', () => {
+    it('sends 3 chunks then done, fetch called 4 times in order', async () => {
+      mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
+
+      await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 0, 'Hello');
+      await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 1, ' ');
+      await relayStreamChunk(API_URL, ACCESS_TOKEN, MESSAGE_ID, 2, 'World');
+      await relayStreamDone(API_URL, ACCESS_TOKEN, MESSAGE_ID, 3);
+
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+
+      const urls = mockFetch.mock.calls.map((c: any[]) => c[0] as string);
+      expect(urls[0]).toContain('/stream/chunk');
+      expect(urls[1]).toContain('/stream/chunk');
+      expect(urls[2]).toContain('/stream/chunk');
+      expect(urls[3]).toContain('/stream/done');
+    });
+  });
+});

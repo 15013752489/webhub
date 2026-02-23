@@ -291,3 +291,56 @@ export interface ChannelCapabilities {
   /** 支持按钮 [Channel SDK 标准] */
   buttons?: boolean;
 }
+
+// ── T005 Plugin-Channel SSE: Streaming Types ─────────────────────────────────
+
+/**
+ * T005: Content type for multi-type message rendering (mirrors API MessageContentType).
+ */
+export type MessageContentType = 'text' | 'image' | 'file' | 'action' | 'unknown';
+
+/**
+ * T005: Payload for a single streaming chunk, sent to API via POST /api/channel/stream/chunk.
+ */
+export interface StreamChunkPayload {
+  /** Unique message ID (UUID v4) */
+  messageId: string;
+  /** Monotonically increasing sequence number (0-based) */
+  seq: number;
+  /** Incremental text delta from this chunk */
+  delta: string;
+}
+
+/**
+ * T005: Payload for the streaming completion frame, POST /api/channel/stream/done.
+ */
+export interface StreamDonePayload {
+  /** Same messageId as the preceding chunks */
+  messageId: string;
+  /** Total number of chunks sent (for frontend sequence validation) */
+  totalSeq: number;
+}
+
+/**
+ * T005: A single cached message entry on the plugin side.
+ */
+export interface PluginCacheEntry {
+  /** Message ID (UUID v4) — idempotency key */
+  messageId: string;
+  /** Serialised outbound message payload */
+  payload: string;
+  /** Unix ms timestamp when cached */
+  cachedAt: number;
+  /** Whether the message has been acknowledged by the API */
+  acked?: boolean;
+}
+
+/**
+ * T005: Root structure of the plugin-side message cache JSON file
+ * (default: ~/.openclaw/chatu/message_cache.json).
+ */
+export interface PluginMessageCacheFile {
+  version: 1;
+  entries: PluginCacheEntry[];
+  updatedAt: number;
+}
