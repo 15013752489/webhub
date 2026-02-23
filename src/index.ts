@@ -473,35 +473,25 @@ export default function (api: OpenClawPluginApi) {
       const text = msg.content?.text?.trim() ?? '';
       if (!text) return;
 
-      // Phase 11 T048: role:agent frames originate from the human operator (webhub frontend).
-      // Instead of running through the AI pipeline, forward them into OpenClaw as an agent message.
-      if ((msg as any).role === 'agent') {
-        try {
-          if (typeof (api as any).dispatch === 'function') {
-            const agentCfg = getAccountConfig(ctx.accountId);
-            await (api as any).dispatch({
-              channel: agentCfg.channelId,
-              accountId: ctx.accountId,
-              from: (msg as any).sender?.id ?? 'agent',
-              text,
-              messageId: msg.id,
-              metadata: { role: 'agent', ...((msg as any).metadata ?? {}) },
-            });
-          } else {
-            api.logger.warn('[chatu] api.dispatch not available; cannot forward agent message to OpenClaw');
-          }
-        } catch (err) {
-          api.logger.error(`[chatu] Error dispatching agent message: ${String(err)}`);
-        }
-        return;
-      }
-
       const freshCfg = api.config ?? {};
+
+      // Phase 11 T048 (fixed): role:agent frames come from the human operator via the
+      // webhub frontend.  api.dispatch() does not exist in the OpenClaw plugin SDK;
+      // instead we re-use dispatchUserMessage so the agent message appears in OpenClaw's
+      // conversation context (sender = 'webhub-agent').  OpenClaw AI may reply; if it does,
+      // the reply is delivered via deliverOutbound → /api/channel/messages → frontend.
+      const senderId = (msg as any).role === 'agent'
+        ? ((msg as any).sender?.id ?? 'webhub-agent')
+        : msg.sender.id;
+      const senderName = (msg as any).role === 'agent'
+        ? ((msg as any).sender?.displayName ?? 'Agent')
+        : msg.sender.displayName;
+
       await dispatchUserMessage({
         id: msg.id,
         content: text,
-        senderId: msg.sender.id,
-        senderName: msg.sender.displayName,
+        senderId,
+        senderName,
         timestamp: msg.timestamp,
         accountId: ctx.accountId,
         cfg: freshCfg,
