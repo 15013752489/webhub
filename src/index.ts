@@ -25,6 +25,8 @@ import type {
   ChannelSetupInput,
   ChannelLogSink,
 } from 'openclaw/plugin-sdk';
+import fs from 'fs/promises';
+import path from 'path';
 import pkg from '../package.json';
 import { WebSocketAdapter } from './sdk/adapters/websocket';
 import { MessageCache } from './sdk/adapters/cache';
@@ -507,6 +509,120 @@ export default function (api: OpenClawPluginApi) {
     } catch (_) { /* best-effort */ }
   }
 
+  // ── T012 display-sender-session: resolveSessionKey helper ──────────────────
+
+  /**
+   * Derive the OpenClaw sessionKey for a senderId using the same routing logic
+   * as dispatchUserMessage. This is deterministic and requires no lookup table.
+   */
+  function resolveSessionKey(senderId: string, accountId: string, cfg: any): string {
+    const runtime = api.runtime;
+    const route = runtime.channel.routing.resolveAgentRoute({
+      cfg,
+      channel: CHANNEL_ID,
+      accountId,
+      peer: { kind: 'direct' as const, id: senderId },
+    });
+    return route.sessionKey as string;
+  }
+
+  // ── T011 display-sender-session: session command processor ─────────────────
+
+  /**
+   * Fetch and execute pending session commands for this channel.
+   * Called at the end of each poll loop iteration.
+   * Each command is acked (success or failure) before moving to the next.
+   */
+  async function processCommands(cfg: Omit<ChatuAccount, 'accountId'>, accountId: string): Promise<void> {
+    if (!cfg.accessToken) return;
+
+    const resp = await timedFetch(
+      `${cfg.apiUrl}/api/channel/commands?channelId=${encodeURIComponent(cfg.channelId)}`,
+      {
+        method: 'GET',
+        headers: {
+          'X-Channel-Token': cfg.accessToken,
+          'X-Channel-ID': cfg.channelId,
+        },
+      },
+      cfg.timeout,
+    );
+
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    const commands: Array<{
+      id: string;
+      commandType: 'reset' | 'switch';
+      senderId: string;
+      payload?: { targetSessionKey?: string; reason?: string } | null;
+    }> = data?.data?.commands ?? [];
+
+    for (const cmd of commands) {
+      let ackSuccess = false;
+      let ackError: string | undefined;
+
+      try {
+        const freshCfg = api.config ?? {};
+        const sessionKey = resolveSessionKey(cmd.senderId, accountId, freshCfg);
+
+        if (cmd.commandType === 'reset') {
+          // Resolve the sessions store directory and derive the transcript path
+          const storePath = api.runtime.channel.session.resolveStorePath(
+            (freshCfg as any)?.session?.store,
+          );
+          const transcriptPath = path.join(storePath, `${sessionKey}.jsonl`);
+          try {
+            await fs.unlink(transcriptPath);
+            api.logger.info(`[chatu] Session reset: deleted transcript (key=${sessionKey})`);
+          } catch (e: any) {
+            if (e.code !== 'ENOENT') throw e;
+            // ENOENT = already empty/non-existent, treat as success
+          }
+          ackSuccess = true;
+
+        } else if (cmd.commandType === 'switch') {
+          const targetSessionKey = cmd.payload?.targetSessionKey;
+          if (!targetSessionKey) throw new Error('Missing targetSessionKey');
+
+          const storePath = api.runtime.channel.session.resolveStorePath(
+            (freshCfg as any)?.session?.store,
+          );
+          const currentPath = path.join(storePath, `${sessionKey}.jsonl`);
+          const targetPath = path.join(storePath, `${targetSessionKey}.jsonl`);
+
+          // Restore target session as the current session
+          await fs.copyFile(targetPath, currentPath);
+          api.logger.info(`[chatu] Session switched to ${targetSessionKey} (sender=${cmd.senderId})`);
+          ackSuccess = true;
+        }
+      } catch (e: unknown) {
+        ackError = String(e);
+        api.logger.error(`[chatu] Command ${cmd.id} (${cmd.commandType}) failed: ${ackError}`);
+      }
+
+      // Ack regardless of outcome
+      try {
+        await timedFetch(
+          `${cfg.apiUrl}/api/channel/commands/${cmd.id}/ack`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Channel-Token': cfg.accessToken,
+            },
+            body: JSON.stringify({
+              success: ackSuccess,
+              error: ackError,
+              channelId: cfg.channelId,
+            }),
+          },
+          cfg.timeout,
+        );
+      } catch (_) { /* best-effort */ }
+    }
+  }
+
   /**
    * Plugin-Channel Realtime (T012): WebSocket-based gateway loop.
    * Replaces HTTP polling. Connects to /api/channel/ws via WebSocketAdapter
@@ -757,6 +873,11 @@ export default function (api: OpenClawPluginApi) {
             cfg: freshCfg,
           });
         }
+
+        // T011 display-sender-session: process pending session commands
+        await processCommands(cfg, accountId).catch((e) => {
+          api.logger.warn(`[chatu] processCommands error (account=${accountId}): ${String(e)}`);
+        });
       } catch (err) {
         consecutiveErrors++;
         api.logger.warn(`[chatu] Poll failed (account=${accountId}, errors=${consecutiveErrors}): ${String(err)}`);
