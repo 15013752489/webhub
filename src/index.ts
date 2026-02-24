@@ -27,6 +27,7 @@ import type {
 } from 'openclaw/plugin-sdk';
 import fs from 'fs/promises';
 import path from 'path';
+import os from 'os';
 import pkg from '../package.json';
 import { WebSocketAdapter } from './sdk/adapters/websocket';
 import { MessageCache } from './sdk/adapters/cache';
@@ -180,35 +181,8 @@ export default function (api: OpenClawPluginApi) {
     const cfg = getAccountConfig(accountId);
     if (!cfg.apiUrl) return;
 
-    // Step 1: register (secret → accessToken)
-    if (cfg.channelId && cfg.secret && !cfg.accessToken) {
-      try {
-        const resp = await timedFetch(
-          `${cfg.apiUrl}/api/channel/register`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channelId: cfg.channelId, secret: cfg.secret }),
-          },
-          cfg.timeout,
-        );
-        if (resp.ok) {
-          const data = await resp.json();
-          const token: string | undefined = data?.data?.accessToken;
-          if (token) {
-            const cfgKey = accountId
-              ? `channels.chatu.accounts.${accountId}.accessToken`
-              : 'channels.chatu.accessToken';
-            try { await (api as any).config?.set?.(cfgKey, token); } catch (_) { /* ok */ }
-            api.logger.info(`[chatu] Channel registered (channelId=${cfg.channelId})`);
-          }
-        }
-      } catch (err) {
-        api.logger.warn(`[chatu] Register request failed: ${String(err)}`);
-      }
-    }
-
-    // Step 2: connect
+    // Connect directly using accessToken (secret-based registration removed;
+    // credentials are obtained via quick-register or manual config).
     const refreshed = getAccountConfig(accountId);
     if (refreshed.accessToken && refreshed.channelId) {
       try {
@@ -220,12 +194,16 @@ export default function (api: OpenClawPluginApi) {
               'Content-Type': 'application/json',
               'x-access-token': refreshed.accessToken,
             },
-            body: JSON.stringify({ channelId: refreshed.channelId, pluginVersion: pkg.version }),
+            body: JSON.stringify({
+              channelId: refreshed.channelId,
+              pluginVersion: pkg.version,
+              workingDir: os.homedir(),
+            }),
           },
           refreshed.timeout,
         );
         if (resp.ok) {
-          api.logger.info(`[chatu] Channel connected (channelId=${refreshed.channelId}, v${pkg.version})`);  
+          api.logger.info(`[chatu] Channel connected (channelId=${refreshed.channelId}, v${pkg.version}, workingDir=${os.homedir()})`);
         }
       } catch (err) {
         api.logger.warn(`[chatu] Connect request failed: ${String(err)}`);
@@ -1269,23 +1247,27 @@ export default function (api: OpenClawPluginApi) {
       },
 
       // T042: streaming relay — forward AI stream chunks/done to WebHub API
-      sendStreamChunk: async (ctx: any) => {
-        const { messageId, seq, delta, accountId } = ctx;
-        const result = await deliverStreamChunk({ messageId, seq, delta, accountId });
-        if (!result.ok) {
-          api.logger.warn(`[chatu] stream chunk relay failed (messageId=${messageId}): ${result.error}`);
-        }
-        return result;
-      },
+      // Cast to any: sendStreamChunk/sendStreamDone are chatu-specific extensions
+      // not yet in the openclaw plugin-sdk ChannelOutboundAdapter type.
+      ...(({
+        sendStreamChunk: async (ctx: any) => {
+          const { messageId, seq, delta, accountId } = ctx;
+          const result = await deliverStreamChunk({ messageId, seq, delta, accountId });
+          if (!result.ok) {
+            api.logger.warn(`[chatu] stream chunk relay failed (messageId=${messageId}): ${result.error}`);
+          }
+          return result;
+        },
 
-      sendStreamDone: async (ctx: any) => {
-        const { messageId, totalSeq, accountId } = ctx;
-        const result = await deliverStreamDone({ messageId, totalSeq, accountId });
-        if (!result.ok) {
-          api.logger.warn(`[chatu] stream done relay failed (messageId=${messageId}): ${result.error}`);
-        }
-        return result;
-      },
+        sendStreamDone: async (ctx: any) => {
+          const { messageId, totalSeq, accountId } = ctx;
+          const result = await deliverStreamDone({ messageId, totalSeq, accountId });
+          if (!result.ok) {
+            api.logger.warn(`[chatu] stream done relay failed (messageId=${messageId}): ${result.error}`);
+          }
+          return result;
+        },
+      }) as any),
     },
   };
 
