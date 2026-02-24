@@ -363,6 +363,77 @@ export default function (api: OpenClawPluginApi) {
     }
   }
 
+  // ── T011 US3: Cross-channel relay helpers ────────────────────────────────────
+
+  /**
+   * Forward a message that arrived on another OpenClaw channel (e.g. TUI,
+   * WhatsApp, Telegram) to this ChatU WebHub channel so the conversation
+   * appears in the frontend with a cross-channel badge.
+   *
+   * Call this from any OpenClaw integration point that has access to the
+   * per-channel message — for example from an OpenClaw `before_message_write`
+   * hook (when it becomes available in the SDK), or from a custom relay script.
+   *
+   * @param params.sourceChannel  Originating channel id (e.g. 'tui', 'whatsapp')
+   * @param params.direction      'inbound' (AI reply) or 'outbound' (user message)
+   * @param params.senderName     Display name of the sender
+   * @param params.content        Text content of the message
+   * @param params.sessionKey     Session key in the originating channel
+   * @param params.accountId      ChatU account id (defaults to 'default')
+   */
+  async function relayCrossChannelMessage(params: {
+    sourceChannel: string;
+    direction: 'inbound' | 'outbound';
+    senderName: string;
+    content: string;
+    sessionKey: string;
+    accountId?: string | null;
+  }): Promise<{ ok: boolean; id?: string; error?: string }> {
+    const cfg = getAccountConfig(params.accountId);
+    if (!cfg.apiUrl || !cfg.accessToken) {
+      return { ok: false, error: 'Missing apiUrl or accessToken for cross-channel relay' };
+    }
+
+    try {
+      const resp = await timedFetch(
+        `${cfg.apiUrl}/api/channel/cross-channel-messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Access-Token': cfg.accessToken,
+          },
+          body: JSON.stringify({
+            sourceChannel: params.sourceChannel,
+            direction: params.direction,
+            senderName: params.senderName,
+            content: params.content,
+            sessionKey: params.sessionKey,
+          }),
+        },
+        cfg.timeout,
+      );
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        api.logger.warn(
+          `[chatu] cross-channel relay failed (source=${params.sourceChannel}): HTTP ${resp.status} ${errorText}`,
+        );
+        return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+      }
+
+      const result = await resp.json();
+      api.logger.info(
+        `[chatu] cross_channel_relay_ok (source=${params.sourceChannel}, id=${result.id}, direction=${params.direction})`,
+      );
+      return { ok: true, id: result.id };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      api.logger.error(`[chatu] cross-channel relay error: ${message}`);
+      return { ok: false, error: message };
+    }
+  }
+
   // ── Gateway: poll + dispatch inbound user messages ───────────────────────────
 
   /**
@@ -1307,6 +1378,57 @@ export function computeBackoffMs(
   maxMs: number = MAX_BACKOFF_MS,
 ): number {
   return Math.min(baseMs * Math.pow(2, consecutiveErrors), maxMs);
+}
+
+/**
+ * T011 US3 testable export: forward a cross-channel message to the ChatU WebHub
+ * service so it appears in the frontend with a source-channel badge.
+ *
+ * Can be called from OpenClaw pipeline hooks (e.g. `before_message_write`) or
+ * from standalone relay scripts that have access to the channel credentials.
+ *
+ * @param apiUrl         - WebHub service base URL
+ * @param accessToken    - Channel access token (`X-Access-Token`)
+ * @param sourceChannel  - Originating channel id  (e.g. 'tui', 'whatsapp')
+ * @param direction      - 'inbound' (AI reply) or 'outbound' (user message)
+ * @param senderName     - Display name of the sender
+ * @param content        - Text content of the message
+ * @param sessionKey     - Session key in the originating channel
+ * @param timeoutMs      - Fetch timeout in milliseconds (default 30 s)
+ */
+export async function relayCrossChannelMessage(
+  apiUrl: string,
+  accessToken: string,
+  sourceChannel: string,
+  direction: 'inbound' | 'outbound',
+  senderName: string,
+  content: string,
+  sessionKey: string,
+  timeoutMs: number = 30_000,
+): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const resp = await fetch(`${apiUrl}/api/channel/cross-channel-messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Access-Token': accessToken,
+      },
+      body: JSON.stringify({ sourceChannel, direction, senderName, content, sessionKey }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      return { ok: false, error: `HTTP ${resp.status}: ${errorText}` };
+    }
+    const result = await resp.json();
+    return { ok: true, id: result.id };
+  } catch (err: unknown) {
+    clearTimeout(timer);
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**

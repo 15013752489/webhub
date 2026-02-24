@@ -434,6 +434,46 @@ export class WebHubAdapter implements ConnectionAdapter {
   }
   
   /**
+   * US3 Cross-Channel Relay: forward a message from another OpenClaw channel
+   * to this ChatU WebHub channel so it appears in the frontend with a special
+   * source-channel badge.
+   *
+   * Calls POST /api/channel/cross-channel-messages authenticated via
+   * X-Access-Token (same token used for polling / outbound delivery).
+   *
+   * @param payload - Cross-channel message payload
+   * @returns Resolves with the stored message id, channelId and createdAt from the service
+   */
+  async postCrossChannelMessage(payload: {
+    /** Originating channel id (lowercase, max 64 chars, /^[a-z0-9_-]{1,64}$/) */
+    sourceChannel: string;
+    /** 'inbound' = AI reply, 'outbound' = user message */
+    direction: 'inbound' | 'outbound';
+    /** Display name of the sender */
+    senderName: string;
+    /** Text content of the message */
+    content: string;
+    /** Session key from the originating channel */
+    sessionKey: string;
+    /** Optional extra metadata forwarded as-is */
+    metadata?: Record<string, unknown>;
+  }): Promise<{ id: string; channelId: string; createdAt: string }> {
+    // Note: the cross-channel endpoint returns { id, channelId, createdAt } directly,
+    // not wrapped in { success, data }. Cast accordingly.
+    const raw = await this.request<unknown>(
+      '/api/channel/cross-channel-messages',
+      payload as unknown as Record<string, unknown>,
+      true,
+    ) as unknown as Record<string, unknown>;
+
+    if (!raw.id) {
+      throw new Error(`postCrossChannelMessage failed: ${JSON.stringify(raw)}`);
+    }
+
+    return raw as unknown as { id: string; channelId: string; createdAt: string };
+  }
+
+  /**
    * 订阅消息 [Channel SDK 标准]
    */
   onMessage(callback: MessageCallback): void {
