@@ -1377,11 +1377,27 @@ export default function (api: OpenClawPluginApi) {
         .map((b) => b.text ?? '')
         .join('\n');
     }
-    // Strip OpenClaw system metadata prefix injected at the beginning of assistant messages.
-    // Pattern: "Conversation info (untrusted metadata): ```json {...} ``` [date] actual_message"
-    content = content
-      .replace(/^Conversation info \(untrusted metadata\):[\s\S]*?```[\s\S]*?\[[^\]]+\]\s*/, '')
-      .trim();
+
+    // Strip OpenClaw system metadata prefix and extract embedded metadata.
+    // Pattern: "Conversation info (untrusted metadata): ```json\n{...}\n``` [date] actual_message"
+    const metaPrefixMatch = content.match(
+      /^Conversation info \(untrusted metadata\):\s*```(?:json)?\s*([\s\S]*?)```\s*(?:\[[^\]]*\])?\s*/,
+    );
+    if (metaPrefixMatch) {
+      // Parse the embedded metadata to detect the sender channel.
+      try {
+        const embeddedMeta = JSON.parse(metaPrefixMatch[1].trim());
+        // If the message originated from our own webhub frontend, skip relay to avoid duplicates.
+        // OpenClaw injects sender_id="webhub" for messages forwarded from the chatu channel plugin.
+        const embeddedSender: string = embeddedMeta?.sender_id ?? embeddedMeta?.sender ?? '';
+        if (embeddedSender === 'webhub' || embeddedSender.startsWith('chatu')) return;
+      } catch { /* ignore parse errors */ }
+      // Strip the whole prefix regardless of parse success.
+      content = content.replace(
+        /^Conversation info \(untrusted metadata\):[\s\S]*?```[\s\S]*?```\s*(?:\[[^\]]*\])?\s*/,
+        '',
+      ).trim();
+    }
 
     if (!content.trim()) return; // skip empty or tool-only messages
 
