@@ -1345,6 +1345,72 @@ export default function (api: OpenClawPluginApi) {
   // ── Register channel with OpenClaw ─────────────────────────────────────────
   api.registerChannel({ plugin: chatuChannel });
 
+  // ── T011 US3: Cross-channel relay via before_message_write hook ─────────────
+  //
+  // Every time OpenClaw writes a message to any session transcript, this hook
+  // fires synchronously. We relay messages from channels OTHER than ChatU so
+  // they show up in the ChatU frontend with a cross-channel badge.
+  //
+  // The hook MUST be synchronous. Async relay is fired-and-forgotten (.catch).
+  api.on('before_message_write', (event, ctx) => {
+    const sessionKey = ctx.sessionKey ?? '';
+
+    // Skip ChatU's own channel sessions to prevent relay loops.
+    // ChatU session keys always contain the CHANNEL_ID token 'chatu'.
+    if (!sessionKey || sessionKey.includes('chatu')) return;
+
+    const msg = event.message as any;
+    const role: string = msg?.role ?? '';
+
+    // Only relay user (outbound) and assistant (inbound) messages; skip tool/system.
+    if (role !== 'user' && role !== 'assistant') return;
+
+    const direction: 'inbound' | 'outbound' = role === 'assistant' ? 'inbound' : 'outbound';
+
+    // Extract plain-text content from the AgentMessage (string or content-block array).
+    let content = '';
+    if (typeof msg.content === 'string') {
+      content = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      content = (msg.content as any[])
+        .filter((b) => b?.type === 'text')
+        .map((b) => b.text ?? '')
+        .join('\n');
+    }
+    if (!content.trim()) return; // skip empty or tool-only messages
+
+    // Derive source channel from session key.
+    // Session key format: "{agentId}:{channel}:{peerId}" (approx.)
+    // 'main' channel = TUI / CLI direct mode → label as 'tui'.
+    const parts = sessionKey.split(':');
+    const channelPart = parts[1] || parts[0] || 'tui';
+    const rawSource = channelPart === 'main' ? 'tui' : channelPart;
+    // Sanitize to match backend /^[a-z0-9_-]{1,64}$/ validation.
+    const sourceChannel =
+      rawSource
+        .replace(/[^a-z0-9_-]/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 64) || 'tui';
+
+    const senderName = direction === 'inbound' ? 'OpenClaw' : sourceChannel;
+
+    // Fire-and-forget (hook is sync; the HTTP relay runs in background).
+    relayCrossChannelMessage({
+      sourceChannel,
+      direction,
+      senderName,
+      content: content.trim(),
+      sessionKey,
+      accountId: null,
+    }).catch((err: unknown) => {
+      api.logger.warn(
+        `[chatu] before_message_write relay failed (source=${sourceChannel}, dir=${direction}): ${String(err)}`,
+      );
+    });
+
+    // Return undefined → don't block the message write.
+  });
+
   api.logger.info('[chatu] Channel plugin loaded');
 
   // Return plugin lifecycle
