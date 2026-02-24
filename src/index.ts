@@ -1377,6 +1377,12 @@ export default function (api: OpenClawPluginApi) {
         .map((b) => b.text ?? '')
         .join('\n');
     }
+    // Strip OpenClaw system metadata prefix injected at the beginning of assistant messages.
+    // Pattern: "Conversation info (untrusted metadata): ```json {...} ``` [date] actual_message"
+    content = content
+      .replace(/^Conversation info \(untrusted metadata\):[\s\S]*?```[\s\S]*?\[[^\]]+\]\s*/, '')
+      .trim();
+
     if (!content.trim()) return; // skip empty or tool-only messages
 
     // Derive source channel from session key.
