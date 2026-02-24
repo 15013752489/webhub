@@ -69,6 +69,13 @@ export default function (api: OpenClawPluginApi) {
   /** Stores failed AI replies for retry on reconnect. One per account. */
   const accountCaches = new Map<string, MessageCache>();
 
+  /**
+   * Bridges before_message_write → deliver callback so both relay and direct
+   * delivery paths carry the same dedupId (the OpenClaw internal message ID).
+   * Key: sessionKey, Value: OpenClaw msg.id
+   */
+  const pendingRelayIds = new Map<string, string>();
+
   function getAccountCache(accountId: string): MessageCache {
     if (!accountCaches.has(accountId)) {
       accountCaches.set(
@@ -388,6 +395,7 @@ export default function (api: OpenClawPluginApi) {
     content: string;
     sessionKey: string;
     accountId?: string | null;
+    dedupId?: string;
   }): Promise<{ ok: boolean; id?: string; error?: string }> {
     const cfg = getAccountConfig(params.accountId);
     if (!cfg.apiUrl || !cfg.accessToken) {
@@ -409,6 +417,7 @@ export default function (api: OpenClawPluginApi) {
             senderName: params.senderName,
             content: params.content,
             sessionKey: params.sessionKey,
+            ...(params.dedupId ? { dedupId: params.dedupId } : {}),
           }),
         },
         cfg.timeout,
@@ -502,11 +511,15 @@ export default function (api: OpenClawPluginApi) {
           deliver: async (payload: any) => {
             const text: string = payload.text ?? '';
             if (!text) return;
+            // Retrieve the dedupId stored by before_message_write for this session.
+            const dedupId = pendingRelayIds.get(route.sessionKey as string);
+            if (dedupId) pendingRelayIds.delete(route.sessionKey as string);
             const result = await deliverOutbound({
               text,
               target: senderId,
               accountId,
               replyTo: payload.replyToId ?? id,
+              metadata: dedupId ? { dedupId } : undefined,
             });
             if (!result.ok) {
               api.logger.error(`[chatu] Failed to deliver AI reply (target=${senderId}): ${result.error}`);
@@ -1401,6 +1414,12 @@ export default function (api: OpenClawPluginApi) {
 
     if (!content.trim()) return; // skip empty or tool-only messages
 
+    // Strip XML wrapper tags that OpenClaw may inject into AI responses
+    // (e.g. <final>...</final>, <answer>...</answer>) so the relay content
+    // matches what deliverOutbound sends after BufferedBlockDispatcher processing.
+    const strippedContent = content.trim().replace(/^<[a-zA-Z_][a-zA-Z0-9_-]*>([\s\S]*)<\/[a-zA-Z_][a-zA-Z0-9_-]*>$/, '$1').trim();
+    if (!strippedContent) return;
+
     // Derive source channel from session key.
     // Session key format: "{agentId}:{channel}:{peerId}" (approx.)
     // 'main' channel = TUI / CLI direct mode → label as 'tui'.
@@ -1416,19 +1435,30 @@ export default function (api: OpenClawPluginApi) {
 
     const senderName = direction === 'inbound' ? 'OpenClaw' : sourceChannel;
 
-    // Fire-and-forget (hook is sync; the HTTP relay runs in background).
-    relayCrossChannelMessage({
-      sourceChannel,
-      direction,
-      senderName,
-      content: content.trim(),
-      sessionKey,
-      accountId: null,
-    }).catch((err: unknown) => {
-      api.logger.warn(
-        `[chatu] before_message_write relay failed (source=${sourceChannel}, dir=${direction}): ${String(err)}`,
-      );
-    });
+    // Store the OpenClaw message ID so the deliver callback (deliverOutbound path)
+    // can retrieve and attach it as dedupId, making both write paths carry the
+    // same identifier for reliable ID-based dedup on the backend.
+    const ocMsgId: string = (msg as any).id ?? '';
+    if (ocMsgId) pendingRelayIds.set(sessionKey, ocMsgId);
+
+    // Fire-and-forget with a short delay so that the direct deliverOutbound path
+    // (which calls POST /api/channel/messages) has time to complete first.
+    const RELAY_DEDUP_DELAY_MS = 500;
+    setTimeout(() => {
+      relayCrossChannelMessage({
+        sourceChannel,
+        direction,
+        senderName,
+        content: strippedContent,
+        sessionKey,
+        accountId: null,
+        dedupId: ocMsgId || undefined,
+      }).catch((err: unknown) => {
+        api.logger.warn(
+          `[chatu] before_message_write relay failed (source=${sourceChannel}, dir=${direction}): ${String(err)}`,
+        );
+      });
+    }, RELAY_DEDUP_DELAY_MS);
 
     // Return undefined → don't block the message write.
   });
