@@ -248,6 +248,7 @@ export default function (api: OpenClawPluginApi) {
     mediaType?: string;
     messageType?: string;
     metadata?: Record<string, unknown>;
+    raw?: unknown;
   }): Promise<{ ok: boolean; messageId?: string; error?: string }> {
     const cfg = getAccountConfig(params.accountId);
     if (!cfg.apiUrl || !cfg.accessToken) {
@@ -269,6 +270,7 @@ export default function (api: OpenClawPluginApi) {
     if (params.metadata) payload.metadata = params.metadata;
     // Phase 11 T049: always stamp role:'ai' so the service can persist the correct author role
     payload.role = 'ai';
+    if (params.raw !== undefined) payload.raw = params.raw;
 
     try {
       const resp = await timedFetch(
@@ -396,6 +398,7 @@ export default function (api: OpenClawPluginApi) {
     sessionKey: string;
     accountId?: string | null;
     dedupId?: string;
+    raw?: unknown;
   }): Promise<{ ok: boolean; id?: string; error?: string }> {
     const cfg = getAccountConfig(params.accountId);
     if (!cfg.apiUrl || !cfg.accessToken) {
@@ -418,6 +421,7 @@ export default function (api: OpenClawPluginApi) {
             content: params.content,
             sessionKey: params.sessionKey,
             ...(params.dedupId ? { dedupId: params.dedupId } : {}),
+            ...(params.raw !== undefined ? { raw: params.raw } : {}),
           }),
         },
         cfg.timeout,
@@ -520,6 +524,7 @@ export default function (api: OpenClawPluginApi) {
               accountId,
               replyTo: payload.replyToId ?? id,
               metadata: dedupId ? { dedupId } : undefined,
+              raw: payload,
             });
             if (!result.ok) {
               api.logger.error(`[chatu] Failed to deliver AI reply (target=${senderId}): ${result.error}`);
@@ -1258,7 +1263,7 @@ export default function (api: OpenClawPluginApi) {
         const { to, text, accountId, replyToId, silent } = ctx;
         if (silent) return { channel: CHANNEL_ID, messageId: 'silent' };
 
-        const result = await deliverOutbound({ text, target: to, accountId, replyTo: replyToId });
+        const result = await deliverOutbound({ text, target: to, accountId, replyTo: replyToId, raw: ctx });
 
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send text (to=${to}): ${result.error}`);
@@ -1286,6 +1291,7 @@ export default function (api: OpenClawPluginApi) {
           replyTo: replyToId,
           mediaUrl,
           mediaType: inferMediaType(mediaUrl),
+          raw: ctx,
         });
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send media (to=${to}): ${result.error}`);
@@ -1304,6 +1310,7 @@ export default function (api: OpenClawPluginApi) {
           replyTo: replyToId,
           messageType,
           metadata,
+          raw: ctx,
         });
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send payload (to=${to}): ${result.error}`);
@@ -1322,6 +1329,7 @@ export default function (api: OpenClawPluginApi) {
           replyTo: replyToId,
           messageType: 'poll',
           metadata: { poll: { question, options, multiple: multiple ?? false } },
+          raw: ctx,
         });
         if (!result.ok) {
           api.logger.error(`[chatu] Failed to send poll (to=${to}): ${result.error}`);
@@ -1414,12 +1422,6 @@ export default function (api: OpenClawPluginApi) {
 
     if (!content.trim()) return; // skip empty or tool-only messages
 
-    // Strip XML wrapper tags that OpenClaw may inject into AI responses
-    // (e.g. <final>...</final>, <answer>...</answer>) so the relay content
-    // matches what deliverOutbound sends after BufferedBlockDispatcher processing.
-    const strippedContent = content.trim().replace(/^<[a-zA-Z_][a-zA-Z0-9_-]*>([\s\S]*)<\/[a-zA-Z_][a-zA-Z0-9_-]*>$/, '$1').trim();
-    if (!strippedContent) return;
-
     // Derive source channel from session key.
     // Session key format: "{agentId}:{channel}:{peerId}" (approx.)
     // 'main' channel = TUI / CLI direct mode → label as 'tui'.
@@ -1449,10 +1451,11 @@ export default function (api: OpenClawPluginApi) {
         sourceChannel,
         direction,
         senderName,
-        content: strippedContent,
+        content: content.trim(),
         sessionKey,
         accountId: null,
         dedupId: ocMsgId || undefined,
+        raw: msg,
       }).catch((err: unknown) => {
         api.logger.warn(
           `[chatu] before_message_write relay failed (source=${sourceChannel}, dir=${direction}): ${String(err)}`,
