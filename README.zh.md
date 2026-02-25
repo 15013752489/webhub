@@ -17,8 +17,8 @@ Chatu 是一个灵活的频道插件，让 OpenClaw 能与任意基于 HTTP/WebS
 openclaw plugins install @chatu-ai/webhub
 
 # 或从源码安装（用于开发）
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 npm install
 npm run build
 openclaw plugins install -l .
@@ -127,7 +127,7 @@ openclaw plugins list | grep chatu
 
 预期输出：
 ```
-│ Chatu   │ chatu  │ loaded  │ ~/path/to/openclaw-web-hub-channel/dist/index.js  │ 0.1.0 │
+│ Chatu   │ chatu  │ loaded  │ ~/path/to/webhub/dist/index.js  │ 0.1.0 │
 ```
 
 ### 第二步：配置频道
@@ -217,7 +217,7 @@ openclaw health
 
 ```bash
 # 1. 以开发模式安装
-cd /path/to/openclaw-web-hub-channel
+cd /path/to/webhub
 openclaw plugins install -l .
 
 # 2. 启动 TypeScript 监听模式（修改时自动编译）

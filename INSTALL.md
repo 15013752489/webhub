@@ -24,8 +24,8 @@ npm install -g @chatu-ai/webhub
 
 ```bash
 # Clone the repository
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 
 # Install as plugin (will auto-build via prepare script)
 openclaw plugins install .
@@ -35,8 +35,8 @@ openclaw plugins install .
 
 ```bash
 # Clone the repository
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 
 # Build the plugin
 npm install
@@ -51,7 +51,7 @@ openclaw plugins install .
 ```bash
 # Link for development (with hot reload)
 openclaw plugins install -l .
-cd /path/to/openclaw-web-hub-channel
+cd /path/to/webhub
 npm run watch
 ```
 

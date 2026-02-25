@@ -24,8 +24,8 @@ npm install -g @chatu-ai/webhub
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 
 # 安装为插件（会通过 prepare 脚本自动构建）
 openclaw plugins install .
@@ -35,8 +35,8 @@ openclaw plugins install .
 
 ```bash
 # 克隆仓库
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 
 # 构建插件
 npm install
@@ -51,7 +51,7 @@ openclaw plugins install .
 ```bash
 # 以热重载方式链接（开发用）
 openclaw plugins install -l .
-cd /path/to/openclaw-web-hub-channel
+cd /path/to/webhub
 npm run watch
 ```
 

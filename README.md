@@ -17,8 +17,8 @@ Chatu is a flexible channel plugin that enables OpenClaw to communicate with any
 openclaw plugins install @chatu-ai/webhub
 
 # Or from source (for development)
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+git clone https://github.com/chatu-ai/webhub.git
+cd webhub
 npm install
 npm run build
 openclaw plugins install -l .
@@ -127,7 +127,7 @@ openclaw plugins list | grep chatu
 
 Expected output:
 ```
-│ Chatu   │ chatu  │ loaded  │ ~/path/to/openclaw-web-hub-channel/dist/index.js  │ 0.1.0 │
+│ Chatu   │ chatu  │ loaded  │ ~/path/to/webhub/dist/index.js  │ 0.1.0 │
 ```
 
 ### Step 2: Configure the Channel
@@ -217,7 +217,7 @@ For plugin development with hot-reload:
 
 ```bash
 # 1. Install in development mode
-cd /path/to/openclaw-web-hub-channel
+cd /path/to/webhub
 openclaw plugins install -l .
 
 # 2. Start TypeScript watch mode (auto-compile on changes)
