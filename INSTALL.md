@@ -50,11 +50,7 @@ openclaw plugins install .
 # Link for development (with hot reload)
 openclaw plugins install -l .
 cd /path/to/openclaw-web-hub-channel
-npm link
-
-# In your OpenClaw directory
-npm link @openclaw/chatu
-openclaw extensions install @openclaw/chatu
+npm run watch
 ```
 
 ---
@@ -67,10 +63,13 @@ openclaw extensions install @openclaw/chatu
 # Enable the channel
 openclaw config set channels.chatu.enabled true
 
-# Set Chatu service API URL (provided by your Website)
+# Set Chatu service API URL (provided by your WebHub backend)
 openclaw config set channels.chatu.apiUrl "https://your-website.com"
 
-# Set access token (provided by your Website)
+# Set channel ID (from WebHub admin panel)
+openclaw config set channels.chatu.channelId "wh_ch_xxxxxx"
+
+# Set access token (provided by your WebHub backend)
 openclaw config set channels.chatu.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 
 # Apply changes
@@ -85,11 +84,17 @@ openclaw gateway restart
     chatu: {
       enabled: true,
       
-      // Chatu service API base URL [Required]
+      // WebHub service base URL [Required]
       apiUrl: "https://your-website.com",
       
-      // Access token [Required]
+      // Channel ID from WebHub admin panel [Required]
+      channelId: "wh_ch_xxxxxx",
+      
+      // Access token [Required unless using secret]
       accessToken: "wh_eyJhbGciOiJIUzI1NiIs...",
+      
+      // Channel secret for registration [Alternative to accessToken]
+      // secret: "wh_secret_xxxxxxxxxx",
       
       // Request timeout (ms) [Optional]
       timeout: 30000,
@@ -98,53 +103,47 @@ openclaw gateway restart
 }
 ```
 
-### 2.3 Environment Variables
+### 2.3 Environment Variables (Quick Register)
+
+If your WebHub backend supports auto-registration, you can skip manual credential setup:
 
 ```bash
-# Alternative: Use environment variables
+# Set registration key and service URL
+export CHATU_KEY="your-registration-key"
 export CHATU_URL="https://your-website.com"
-export CHATU_ACCESS_TOKEN="wh_eyJhbGciOiJIUzI1NiIs..."
 
-# Then configure
-openclaw config set channels.chatu.enabled true
+# Restart gateway to trigger auto-registration
 openclaw gateway restart
 ```
+
+The plugin will automatically call `POST /api/channel/quick-register` and save the returned `channelId` and `accessToken` to config.
 
 ---
 
 ## 3. Verify Installation
 
-### 3.1 Check Channel Status
+### 3.1 Check Plugin Status
 
 ```bash
-# View channel status
-openclaw channels status chatu
+# Verify plugin is loaded
+openclaw plugins list | grep chatu
 
-# Output example:
-# Channel: chatu
-# Status: enabled
-# API URL: https://your-website.com
-# Connection: testing...
+# Expected output:
+# │ Chatu │ chatu │ loaded │ .../dist/index.js │ 0.1.0 │
 ```
 
-### 3.2 Test Connection
+### 3.2 Check Configuration
 
 ```bash
-# Test connection to Chatu service
-openclaw channels test chatu
-
-# Output example:
-# ✓ Chatu channel enabled
-# ✓ API URL: https://your-website.com
-# ✓ Connection: OK
-# ✓ Last ping: 2024-02-06 21:45:00
+# View current chatu config
+openclaw config get channels.chatu
 ```
 
 ### 3.3 View Logs
 
 ```bash
 # Check connection logs
-openclaw logs --channel chatu --level debug
+openclaw logs
 ```
 
 ---
@@ -161,14 +160,11 @@ openclaw config set channels.chatu.enabled false
 openclaw config unset channels.chatu
 ```
 
-### 4.2 Remove Extension
+### 4.2 Remove Plugin
 
 ```bash
 # Remove from OpenClaw
-openclaw extensions uninstall @openclaw/chatu
-
-# If installed from npm
-npm uninstall -g @openclaw/chatu
+openclaw plugins uninstall @openclaw/chatu
 ```
 
 ---
@@ -181,32 +177,29 @@ npm uninstall -g @openclaw/chatu
 |-------|----------|
 | Connection timeout | Check `apiUrl` is correct and accessible |
 | 401 Unauthorized | Verify `accessToken` is valid |
-| 403 Forbidden | Check token permissions |
-| Messages not arriving | Verify webhook endpoint is configured |
-| Messages not sending | Check outbound permissions |
+| Plugin not loading | Run `openclaw plugins list \| grep chatu`; ensure `dist/` exists after build |
+| Messages not arriving | Check WebSocket connection in logs; verify `channelId` is correct |
+| Messages not sending | Confirm `accessToken` and `channelId` are configured |
 
 ### 5.2 Debug Commands
 
 ```bash
-# Enable debug logging
-openclaw config set channels.chatu.debug true
+# View gateway logs
+openclaw logs
 
-# View detailed logs
-openclaw logs --channel chatu --level debug
+# Check plugin status
+openclaw plugins list | grep chatu
 
-# Test webhook manually
-curl -X POST https://your-website.com/chatu/webhook \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -d '{"test": true}'
+# View current config
+openclaw config get channels.chatu
+
+# Test backend health
+curl https://your-website.com/health
 ```
 
 ### 5.3 Get Help
 
 ```bash
-# View channel help
-openclaw channels help chatu
-
 # Check OpenClaw documentation
 openclaw help
 ```
@@ -215,37 +208,30 @@ openclaw help
 
 ## 6. Update
 
-### 6.1 Update Extension
+### 6.1 Update Plugin
 
 ```bash
 # Update to latest version
-openclaw extensions update @openclaw/chatu
-
-# Or via npm
-npm update -g @openclaw/chatu
+openclaw plugins update @openclaw/chatu
 ```
 
 ### 6.2 Check Version
 
 ```bash
 # View installed version
-openclaw extensions list | grep chatu
-
-# Check for updates
-openclaw extensions update --check
+openclaw plugins list | grep chatu
 ```
 
 ---
 
 ## Related Documentation
 
-- [Chatu Design Docs](../docs/chatu/README.md) - API design
+- [Channel Documentation](docs/channel/README.md) - Architecture, API reference, message protocol
 - [OpenClaw Configuration](https://docs.openclaw.ai/gateway/configuration) - Official docs
-- [Channel SDK](../docs/channel/README.md) - Developer guide
 
 ---
 
-*Last updated: 2026-02-06*
+*Last updated: 2026-02-25*
 
 ---
 

@@ -1,122 +1,117 @@
-# OpenClaw WebHub Channel - 概述
+# Chatu Channel Plugin - 架构概述
 
-> **上一节**：[README.md](README.md)  
-> **下一节**：[02-message-schema.md](02-message-schema.md)
+> **下一节**：[02-configuration.md](02-configuration.md)
 
 ---
 
-## 1. 项目目标
+## 1. 什么是 Chatu 插件？
 
-WebHub 是一个基于 HTTP 的通用频道插件，用于连接 OpenClaw 与任意网站的即时通讯 API。
+Chatu 是一个 OpenClaw 频道插件，让 OpenClaw AI 能与任意基于 HTTP/WebSocket 的 **WebHub 后端服务**通信。典型场景是将网站聊天窗口接入 OpenClaw AI。
 
-### 设计目标
+### 角色说明
 
-| 目标 | 说明 | 优先级 |
-|------|------|--------|
-| **通用性** | 支持任意 HTTP API 的消息平台 | P0 |
-| **灵活性** | 可配置的请求/响应映射 | P0 |
-| **完整性** | 支持 OpenClaw 的所有功能 | P1 |
-| **可扩展性** | 支持自定义消息格式和业务逻辑 | P1 |
+| 角色 | 说明 |
+|------|------|
+| **Browser / 前端** | 用户所在的网页，发送消息的源 |
+| **WebHub 后端服务** | 中间层，管理频道和消息队列，需要开发者实现 |
+| **Chatu 插件** | OpenClaw 内运行，连接 WebHub 后端服务 |
+| **OpenClaw AI** | 处理消息、生成回复 |
 
 ---
 
 ## 2. 系统架构
 
-![系统架构图](images/diagram-01.png)
-
-### 组件说明
-
-| 组件 | 作用 |
-|------|------|
-| **Agent** | OpenClaw AI 助手 |
-| **WebHub Plugin** | 频道插件，协调消息处理 |
-| **Message Processor** | 消息处理器，负责格式转换 |
-| **Request Builder** | 请求构建器，构造 API 请求 |
-| **Response Handler** | 响应处理器，处理 API 响应 |
-| **Website REST API** | 网站的 REST 接口 |
-| **Webhook** | 网站主动推送消息的接口 |
+```
+Browser (用户)
+    │  POST /api/webhub/channels/:id/messages
+    ▼
+WebHub 后端服务
+    │  WebSocket ws://...  /api/channel/ws
+    │  (或 HTTP 轮询 fallback)
+    ▼
+Chatu 插件 (本插件)
+    │  调用 OpenClaw AI 流水线
+    ▼
+OpenClaw AI
+    │  POST /api/channel/messages  (AI 回复)
+    ▼
+WebHub 后端服务
+    │  WebSocket push
+    ▼
+Browser (用户收到 AI 回复)
+```
 
 ---
 
 ## 3. 消息流向
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    消息流向                              │
-├─────────────────────────────────────────────────────────┤
-│  OpenClaw ──► Website                                  │
-│  (Outbound)        发送消息模式                         │
-│                                                         │
-│  Website ──► OpenClaw                                   │
-│  (Inbound)         接收消息模式                         │
-└─────────────────────────────────────────────────────────┘
-```
+### 3.1 入站（用户 → AI）
 
----
+1. 浏览器发消息到 WebHub 后端
+2. WebHub 后端通过 WebSocket 推送消息到 Chatu 插件
+3. 插件解析消息，调用 OpenClaw AI 流水线
+4. AI 生成回复，插件通过 `POST /api/channel/messages` 回传给 WebHub
+5. WebHub 通过 WebSocket 将 AI 回复推送给浏览器
 
-## 4. 快速开始
+### 3.2 出站（AI → 用户）
 
-### 4.1 安装
+AI 回复通过以下 HTTP 请求发送：
 
-```bash
-# 克隆仓库
-git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git
-cd openclaw-web-hub-channel
+```http
+POST {apiUrl}/api/channel/messages
+X-Channel-Token: {accessToken}
+X-Channel-ID: {channelId}
+Content-Type: application/json
 
-# 安装依赖
-npm install
-```
-
-### 4.2 配置
-
-```json
 {
-  "channels": {
-    "webhub": {
-      "enabled": true,
-      "api": {
-        "baseUrl": "https://your-website.com/api/webhub"
-      },
-      "webhook": {
-        "path": "/webhook/webhub"
-      }
-    }
-  }
+  "messageId": "msg_1234567_abc",
+  "target": { "type": "user", "id": "user-123" },
+  "content": { "text": "AI 回复内容", "format": "plain" },
+  "timestamp": 1708139100000,
+  "role": "ai"
 }
 ```
 
-### 4.3 运行
+---
 
-```bash
-npm run dev
-```
+## 4. 连接机制
+
+### 4.1 主连接：WebSocket
+
+插件优先使用 WebSocket 实时连接：
+
+- 连接地址：`{apiUrl}/api/channel/ws`（自动将 http 转为 ws）
+- 认证：请求头携带 `accessToken` 和 `channelId`
+- 断线自动重连（指数退避，最大 30 秒）
+- 重连后自动重发断线期间缓存的未送达回复
+
+### 4.2 兜底：HTTP 轮询（已废弃）
+
+早期版本使用 HTTP 轮询（`GET /api/channel/messages/pending`，每 2 秒），当前版本已切换为 WebSocket，轮询逻辑保留仅供参考。
 
 ---
 
-## 5. 文档结构
+## 5. 生命周期
 
-| 章节 | 文件 | 说明 |
-|------|------|------|
-| 概述 | [01-overview.md](01-overview.md) | 项目目标和架构 |
-| 消息模式 | [02-message-schema.md](02-message-schema.md) | 消息类型定义 |
-| 能力声明 | [03-capabilities.md](03-capabilities.md) | 功能支持矩阵 |
-| API 接口 | [04-api-endpoints.md](04-api-endpoints.md) | REST API 设计 |
-| 配置模式 | [05-configuration.md](05-configuration.md) | 配置项详解 |
-| 消息流程 | [06-message-flows.md](06-message-flows.md) | 消息流转图 |
-| 错误处理 | [07-error-handling.md](07-error-handling.md) | 错误代码和处理 |
-| 安全性 | [08-security.md](08-security.md) | 认证和加密 |
-| 实现计划 | [09-implementation.md](09-implementation.md) | 开发里程碑 |
-| 测试用例 | [10-testing.md](10-testing.md) | 单元测试示例 |
-| 附录 | [11-appendix.md](11-appendix.md) | 限制和参考 |
+插件通过 OpenClaw 的 Gateway 生命周期管理连接：
+
+1. **启动**：通过 `quick-register`（环境变量方式）或手动配置获取凭证，然后调用 `POST /api/channel/connect` 通知后端
+2. **运行**：维持 WebSocket 长连接，持续接收消息并派发给 AI
+3. **停止**：调用 `POST /api/channel/disconnect` 通知后端，断开 WebSocket
 
 ---
 
-## 6. 相关资源
+## 6. 快速注册（环境变量方式）
 
-- **GitHub 仓库**: https://github.com/chatu-ai/openclaw-web-hub-channel
-- **OpenClaw 文档**: https://docs.openclaw.ai
-- **SDK 参考**: /home/chsword/.npm-global/lib/node_modules/openclaw/docs/
+如果设置了以下环境变量，插件启动时会自动向 WebHub 后端注册：
+
+| 环境变量 | 说明 |
+|----------|------|
+| `CHATU_KEY` | 注册密钥 |
+| `CHATU_URL` 或 `CHATU_API_URL` | WebHub 后端地址 |
+
+自动注册调用：`POST {apiUrl}/api/channel/quick-register`，获取 `channelId` 和 `accessToken` 后写入配置。
 
 ---
 
-*最后更新: 2026-02-06*
+*最后更新: 2026-02-25*
