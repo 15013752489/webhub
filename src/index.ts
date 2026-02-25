@@ -504,7 +504,8 @@ export default function (api: OpenClawPluginApi) {
         OriginatingChannel: CHANNEL_ID,
         OriginatingTo: to,
         WasMentioned: true,
-        CommandAuthorized: false,
+        // Authorize slash-commands (messages starting with '/'); regular messages remain unauthorized.
+        CommandAuthorized: content.trim().startsWith('/'),
       });
 
       api.logger.info(`[chatu] Dispatching user message to AI (id=${id}, sender=${senderId})`);
