@@ -1,165 +1,86 @@
-# OpenClaw WebHub Channel - 频道能力声明
+# Chatu Channel Plugin - 功能支持矩阵
 
-> **上一节**：[02-message-schema.md](02-message-schema.md)  
-> **下一节**：[04-api-endpoints.md](04-api-endpoints.md)
-
----
-
-## 1. 功能支持矩阵
-
-![功能矩阵](images/diagram-03.png)
-
-### 1.1 基础消息
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 私聊 (DM) | ✅ | User-to-user messaging |
-| 群聊 | ✅ | Multi-user conversations |
-| 频道消息 | ✅ | Broadcast messages |
-
-### 1.2 消息内容
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 纯文本 | ✅ | Plain text |
-| Markdown | ✅ | Rich formatting |
-| HTML | ✅ | HTML formatting |
-| @提及 | ✅ | @username mentions |
-| 引用回复 | ✅ | Thread/quote replies |
-| 消息编辑 | ✅ | Edit sent messages |
-| 消息删除 | ✅ | Delete messages |
-
-### 1.3 媒体
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 图片 | ✅ | Image files |
-| 视频 | ✅ | Video files |
-| 音频 | ✅ | Audio files |
-| 文件 | ✅ | Document files |
-| 位置 | ✅ | GPS coordinates |
-
-### 1.4 交互
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 表情反应 | ✅ | Emoji reactions |
-| 投票 | ✅ | Multi-choice polls |
-| 按钮 | ✅ | Interactive buttons |
-| 内联键盘 | ✅ | Inline keyboard |
-| 快捷回复 | ✅ | Quick reply buttons |
-
-### 1.5 群组
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 创建群组 | ✅ | Create groups |
-| 邀请成员 | ✅ | Invite members |
-| 群主管理 | ✅ | Admin permissions |
-| 群信息设置 | ✅ | Title/description |
-
-### 1.6 高级
-
-| 功能 | 支持 | 备注 |
-|------|------|------|
-| 消息线程 | ✅ | Message threading |
-| 输入状态 | ✅ | Typing indicators |
-| 在线状态 | ✅ | Presence (online/offline) |
-| 已读回执 | ✅ | Read receipts |
-| 定时消息 | ✅ | Scheduled messages |
-| Webhook | ✅ | Incoming webhooks |
-| 速率限制 | ✅ | Rate limiting |
+> **上一节**：[02-configuration.md](02-configuration.md)  
+> **下一节**：[04-api-reference.md](04-api-reference.md)
 
 ---
 
-## 2. 格式支持
+## 1. 核心能力
 
-| 格式标记 | 支持 | 示例 |
-|---------|------|------|
-| **粗体** | ✅ | `**text**` |
-| *斜体* | ✅ | `*text*` |
-| ~~删除线~~ | ✅ | `~~text~~` |
-| `行内代码` | ✅ | `` `code` `` |
-| ```代码块``` | ✅ | ```js\ncode\n``` |
-| [链接](url) | ✅ | `[text](url)` |
-| > 引用 | ✅ | `> quote` |
-| - 无序列表 | ✅ | `- item` |
-| 1. 有序列表 | ✅ | `1. item` |
-| 表格 | ✅ | \|col1\|col2\| |
-| --- 分割线 | ✅ | Horizontal rule |
+| 能力 | 支持状态 | 说明 |
+|------|----------|------|
+| 私聊（Direct Message） | ✅ 支持 | 与单个用户对话 |
+| 群聊（Group） | ✅ 支持 | 多人会话 |
+| 回复 | ✅ 支持 | 回复指定消息，携带 `replyTo` |
+| 消息编辑 | ✅ 支持 | 编辑已发送的消息 |
+| 消息撤回 | ✅ 支持 | 删除已发送的消息 |
+| 表情反应 | ✅ 支持 | Emoji 反应（需后端实现） |
+| 媒体附件 | ✅ 支持 | 图片、文件等（通过 URL 引用） |
+| 消息线程 | ✅ 支持 | 将回复关联到原消息 |
+| 流式输出 | ✅ 支持 | 分块推送 AI 回复（通过 `/stream/chunk` 端点） |
+| 投票 | ❌ 不支持 | — |
 
 ---
 
-## 3. 能力声明代码
+## 2. 消息内容
+
+| 内容类型 | 支持状态 | 说明 |
+|----------|----------|------|
+| 纯文本 | ✅ 支持 | `content.format = "plain"` |
+| 媒体 URL | ✅ 支持 | 图片、文件以 URL 引用，`media[].url` |
+| 回复引用 | ✅ 支持 | `replyTo.id` 携带被回复的消息 ID |
+
+---
+
+## 3. 会话管理
+
+| 功能 | 支持状态 | 说明 |
+|------|----------|------|
+| 会话重置 | ✅ 支持 | 通过 WebHub 后端下发 `reset` 命令清空对话历史 |
+| 会话切换 | ✅ 支持 | 通过 `switch` 命令切换到指定历史会话 |
+| Slash 命令 | ✅ 支持 | 以 `/` 开头的消息自动授权为命令 |
+
+---
+
+## 4. 跨频道中继
+
+| 功能 | 支持状态 | 说明 |
+|------|----------|------|
+| 跨频道消息同步 | ✅ 支持 | 将其他 OpenClaw 频道（如 WhatsApp、TUI）的消息同步显示到 WebHub 前端 |
+
+通过 `POST /api/channel/cross-channel-messages` 实现，消息携带原始频道标识和方向（入站/出站）。
+
+---
+
+## 5. 连接可靠性
+
+| 特性 | 说明 |
+|------|------|
+| 自动重连 | WebSocket 断线后指数退避重连（2s → 4s → 8s → … 上限 30s） |
+| 失败重发 | 断线期间的未送达 AI 回复缓存在内存（可配置持久化到文件），重连后自动重发 |
+| 消息去重 | 内存维护已处理消息 ID 集合，防止 same-ms 消息重复处理（容量 500） |
+| 心跳探测 | 定期 `GET {apiUrl}/health` 检查后端可达性 |
+
+---
+
+## 6. 声明的能力（代码）
+
+以下是插件向 OpenClaw 注册的 `capabilities` 声明（来自 `src/index.ts`）：
 
 ```typescript
-import type { ChannelCapabilities } from "openclaw/plugin-sdk";
-
-export const capabilities: ChannelCapabilities = {
-  /** 支持的聊天类型 */
-  chatTypes: ["direct", "group"],
-  
-  /** 是否支持投票 */
-  polls: true,
-  
-  /** 是否支持表情反应 */
-  reactions: true,
-  
-  /** 是否支持消息编辑 */
-  edit: true,
-  
-  /** 是否支持消息删除 */
-  unsend: true,
-  
-  /** 是否支持消息回复 */
+capabilities: {
+  chatTypes: ['direct', 'group'],
   reply: true,
-  
-  /** 是否支持特效 */
-  effects: false,
-  
-  /** 是否支持群组管理 */
-  groupManagement: true,
-  
-  /** 是否支持消息线程 */
-  threads: true,
-  
-  /** 是否支持媒体消息 */
+  edit: true,
+  unsend: true,
+  reactions: true,
+  polls: false,
   media: true,
-  
-  /** 是否支持原生命令 */
-  nativeCommands: false,
-  
-  /** 是否阻止流式传输 */
-  blockStreaming: true,
-};
-```
-
----
-
-## 4. 限制配置
-
-```typescript
-interface WebHubLimits {
-  /** 最大消息长度 */
-  maxMessageLength: number;           // 默认: 10000 字符
-  
-  /** 最大媒体文件大小 */
-  maxMediaSize: number;                // 默认: 100MB
-  
-  /** 每条消息最大媒体数量 */
-  maxMediaPerMessage: number;         // 默认: 10
-  
-  /** 单次发送最大接收者数量 */
-  maxRecipients: number;               // 默认: 1
-  
-  /** 速率限制 */
-  rateLimit: {
-    messagesPerSecond: number;         // 默认: 10
-    burstSize: number;                // 默认: 20
-  };
+  threads: true,
+  blockStreaming: false,
 }
 ```
 
 ---
 
-*最后更新: 2026-02-06*
+*最后更新: 2026-02-25*

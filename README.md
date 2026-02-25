@@ -28,6 +28,7 @@ openclaw plugins install -l .
 # Enable and configure the channel
 openclaw config set channels.chatu.enabled true
 openclaw config set channels.chatu.apiUrl "https://your-api.example.com"
+openclaw config set channels.chatu.channelId "wh_ch_xxxxxx"
 openclaw config set channels.chatu.accessToken "your-access-token"
 
 # Restart gateway to apply changes
@@ -62,8 +63,10 @@ openclaw logs
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
 | `enabled` | boolean | No | `true` | Enable/disable the channel |
-| `apiUrl` | string | Yes | - | API base URL for the service |
-| `accessToken` | string | Yes | - | Authentication token |
+| `apiUrl` | string | Yes | — | WebHub service base URL |
+| `channelId` | string | Yes | — | Channel ID from WebHub (e.g. `wh_ch_xxxxx`) |
+| `secret` | string | Either/Or | — | Channel secret (`wh_secret_xxx`) for registration |
+| `accessToken` | string | Either/Or | — | Access token (`wh_xxxxxxx`) |
 | `timeout` | number | No | `30000` | Request timeout in milliseconds |
 
 ### Example Configurations
@@ -75,6 +78,7 @@ openclaw logs
     "chatu": {
       "enabled": true,
       "apiUrl": "https://api.example.com",
+      "channelId": "wh_ch_xxxxxx",
       "accessToken": "your-token",
       "timeout": 30000
     }
@@ -91,11 +95,13 @@ openclaw logs
         "work": {
           "accountId": "work",
           "apiUrl": "https://work-api.example.com",
+          "channelId": "wh_ch_aaaaaa",
           "accessToken": "work-token"
         },
         "personal": {
           "accountId": "personal",
           "apiUrl": "https://personal-api.example.com",
+          "channelId": "wh_ch_bbbbbb",
           "accessToken": "personal-token"
         }
       }
@@ -133,6 +139,9 @@ openclaw config set channels.chatu.enabled true
 # Set API URL
 openclaw config set channels.chatu.apiUrl "https://your-api.example.com"
 
+# Set channel ID (from WebHub admin panel)
+openclaw config set channels.chatu.channelId "wh_ch_xxxxxx"
+
 # Set access token
 openclaw config set channels.chatu.accessToken "your-access-token"
 
@@ -150,6 +159,7 @@ Edit `~/.openclaw/openclaw.json`:
     "chatu": {
       "enabled": true,
       "apiUrl": "https://your-api.example.com",
+      "channelId": "wh_ch_xxxxxx",
       "accessToken": "your-access-token",
       "timeout": 30000
     }

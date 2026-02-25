@@ -1,48 +1,30 @@
-# Channel Documentation
+# Chatu Channel Plugin - 文档目录
 
-This folder contains documentation for the OpenClaw Channel SDK plugin.
-
-## Structure
-
-```
-docs/
-├── channel/          # Channel SDK implementation docs
-│   ├── README.md     # This file
-│   ├── 01-overview.md
-│   ├── 02-sdk-messages.md
-│   ├── 02-message-schema.md
-│   ├── 03-usage-guide.md
-│   ├── 04-capabilities.md
-│   ├── 05-api-endpoints.md
-│   ├── 06-configuration.md
-│   ├── 07-message-flows.md
-│   ├── 08-error-handling.md
-│   ├── 09-security.md
-│   ├── 10-testing.md
-│   └── 11-appendix.md
-└── sdk/              # SDK design discussions
-```
-
-## Overview
-
-The Channel SDK provides TypeScript interfaces and base classes for building OpenClaw channel plugins with HTTP/WebSocket support.
-
-## Quick Links
-
-- [Overview](01-overview.md)
-- [SDK Messages](02-sdk-messages.md)
-- [Message Schema](02-message-schema.md)
-- [Usage Guide](03-usage-guide.md)
-- [Capabilities](04-capabilities.md)
-- [API Endpoints](05-api-endpoints.md)
-- [Configuration](06-configuration.md)
-- [Message Flows](07-message-flows.md)
-- [Error Handling](08-error-handling.md)
-- [Security](09-security.md)
-- [Testing](10-testing.md)
-- [Appendix](11-appendix.md)
-- [WebHub Adapter](12-webhub-adapter.md)
+本目录包含 OpenClaw Chatu 频道插件的技术文档。Chatu 通过 WebSocket（主）和 HTTP 轮询（兜底）与任意 WebHub 后端服务通信。
 
 ---
 
-*Last updated: 2026-02-07*
+## 目录结构
+
+| 文档 | 内容 |
+|------|------|
+| [01-overview.md](01-overview.md) | 架构概述、消息流向、工作原理 |
+| [02-configuration.md](02-configuration.md) | 配置项说明、多账户配置、环境变量 |
+| [03-capabilities.md](03-capabilities.md) | 插件支持的功能矩阵 |
+| [04-api-reference.md](04-api-reference.md) | 插件调用的 WebHub API 端点 |
+| [05-message-protocol.md](05-message-protocol.md) | 入站/出站消息格式规范 |
+| [06-security.md](06-security.md) | 认证方式与安全说明 |
+
+---
+
+## 快速导航
+
+- **新接入 WebHub 后端？** → [01-overview.md](01-overview.md)
+- **配置插件？** → [02-configuration.md](02-configuration.md)
+- **实现 WebHub 后端服务？** → [04-api-reference.md](04-api-reference.md) 和 [05-message-protocol.md](05-message-protocol.md)
+- **了解支持的消息类型？** → [03-capabilities.md](03-capabilities.md)
+- **Auth/Token 问题？** → [06-security.md](06-security.md)
+
+---
+
+*最后更新: 2026-02-25*

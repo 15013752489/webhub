@@ -20,6 +20,7 @@ import {
   ChannelStats,
   MessageType,
   TargetType,
+  Target,
 } from '../types/channel';
 import type {
   ConnectionAdapter,
@@ -28,6 +29,140 @@ import type {
   AdapterFactory,
 } from '../types/adapters';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * 将 WebHub API 原始消息 JSON 映射为 Channel SDK InboundMessage 格式。
+ *
+ * 这是跨层映射的唯一位置 (SC-003):
+ *   - WebHub sender.name     → InboundMessage.sender.displayName
+ *   - WebHub sender.avatar   → InboundMessage.sender.avatarUrl
+ *   - WebHub authorDisplayName (旧字段兼容) → InboundMessage.sender.displayName
+ *   - WebHub authorId        (旧字段兼容) → InboundMessage.sender.id
+ *   - WebHub replyTo.id      → InboundMessage.replyTo.messageId
+ *   - WebHub replyTo.quoteText → InboundMessage.replyTo.quotedText
+ *   - WebHub content (string 或 {text}) → InboundMessage.content.text
+ *   - WebHub createdAt (string) → InboundMessage.timestamp (ms)
+ */
+export function mapRawToInboundMessage(raw: unknown): InboundMessage {
+  const msg = raw as Record<string, unknown>;
+  const rawSender = (msg.sender && typeof msg.sender === 'object'
+    ? msg.sender
+    : {}) as Record<string, unknown>;
+  const rawContent = msg.content;
+  const rawMedia = Array.isArray(msg.media) ? (msg.media as Array<Record<string, unknown>>) : [];
+  const rawReplyTo = msg.replyTo && typeof msg.replyTo === 'object'
+    ? (msg.replyTo as Record<string, unknown>)
+    : undefined;
+
+  // sender: prefer new-style {id, name, avatar}; fall back to legacy authorId/authorDisplayName
+  const senderId: string = String(
+    rawSender.id ?? msg.authorId ?? ''
+  );
+  const senderDisplayName: string = String(
+    rawSender.name ?? rawSender.displayName ?? msg.authorDisplayName ?? ''
+  );
+  const senderAvatarUrl: string | undefined =
+    (rawSender.avatar as string | undefined) ??
+    (rawSender.avatarUrl as string | undefined) ??
+    undefined;
+
+  // content: new-style string OR legacy {text: ...}
+  const contentText: string =
+    typeof rawContent === 'string'
+      ? rawContent
+      : String((rawContent as Record<string, unknown> | undefined)?.text ?? '');
+
+  // timestamp: ISO string (createdAt) or numeric
+  let ts: number;
+  if (typeof msg.createdAt === 'string') {
+    ts = new Date(msg.createdAt).getTime();
+  } else if (typeof msg.timestamp === 'number') {
+    ts = msg.timestamp;
+  } else {
+    ts = Date.now();
+  }
+
+  return {
+    id: String(msg.id ?? ''),
+    channelId: String(msg.channelId ?? ''),
+    sender: {
+      id: senderId,
+      displayName: senderDisplayName,
+      avatarUrl: senderAvatarUrl,
+      isBot: senderId === 'webhub',
+    },
+    target: (msg.target as Target | undefined) ?? { type: TargetType.USER, id: '' },
+    content: {
+      text: contentText,
+      format: (msg.format as 'plain' | 'markdown' | 'html' | undefined) ?? 'plain',
+    },
+    media: rawMedia.map((m) => ({
+      type: (m.type ?? MessageType.FILE) as MessageType,
+      url: String(m.url ?? ''),
+      mimeType: m.mimeType as string | undefined,
+      size: m.size as number | undefined,
+      width: m.width as number | undefined,
+      height: m.height as number | undefined,
+      duration: m.duration as number | undefined,
+      thumbnailUrl: m.thumbnailUrl as string | undefined,
+    })),
+    replyTo: rawReplyTo
+      ? {
+          messageId: String(rawReplyTo.id ?? ''),
+          quotedText: rawReplyTo.quoteText as string | undefined,
+        }
+      : undefined,
+    timestamp: ts,
+    metadata: msg.metadata as Record<string, unknown> | undefined,
+  };
+}
+
+/**
+ * 将 Channel SDK Media 对象映射为 WebHub API 可接受的媒体格式。
+ *
+ * Channel SDK Media 字段名称（thumbnailUrl / width / height）已与 WebHub 对齐；
+ * 此函数负责补充 WebHub 要求但 SDK 未提供的 filename 字段（从 url 推断），
+ * 是全局唯一的媒体映射位置（SC-003）。
+ *
+ * @param media - Channel SDK Media 对象
+ * @returns WebHub 媒体对象
+ */
+export function mapChannelSdkMedia(media: {
+  type: MessageType;
+  url: string;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailUrl?: string;
+}): {
+  type: MessageType;
+  url: string;
+  mimeType?: string;
+  size?: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  thumbnailUrl?: string;
+  filename?: string;
+} {
+  // Infer filename from URL path when not explicitly available
+  const filename = media.url
+    ? media.url.split('/').pop()?.split('?')[0] || undefined
+    : undefined;
+  return {
+    type: media.type,
+    url: media.url,
+    mimeType: media.mimeType,
+    size: media.size,
+    width: media.width,
+    height: media.height,
+    duration: media.duration,
+    thumbnailUrl: media.thumbnailUrl,
+    filename,
+  };
+}
 
 /**
  * 性能模式
@@ -396,16 +531,24 @@ export class WebHubAdapter implements ConnectionAdapter {
     const messageId = message.messageId || uuidv4();
     
     try {
+      // FR-007: degrade 'channel' target type → 'group' (Channel SDK only supports user/group)
+      const targetType = (message.target.type as string) === 'channel'
+        ? TargetType.GROUP
+        : message.target.type;
+
       const response = await this.request<{ messageId: string; deliveredAt: string }>(
         '/api/channel/messages',
         {
           channelId: this.config.channelId,
           messageId,
-          target: message.target,
+          target: { type: targetType, id: message.target.id, name: message.target.name },
           content: {
             text: message.content.text,
             type: message.content.format || 'text',
           },
+          media: message.media?.map(mapChannelSdkMedia),
+          // Map Channel SDK replyTo (string message ID) → WebHub {id} object
+          replyTo: message.replyTo ? { id: message.replyTo } : undefined,
           metadata: message.metadata,
         },
         true
@@ -449,8 +592,8 @@ export class WebHubAdapter implements ConnectionAdapter {
     sourceChannel: string;
     /** 'inbound' = AI reply, 'outbound' = user message */
     direction: 'inbound' | 'outbound';
-    /** Display name of the sender */
-    senderName: string;
+    /** Sender object — id is optional, name is required */
+    sender: { id?: string; name: string };
     /** Text content of the message */
     content: string;
     /** Session key from the originating channel */
@@ -647,7 +790,7 @@ export class WebHubAdapterFactory implements AdapterFactory {
    */
   createMessageAdapter() {
     return {
-      parseInbound: (raw: unknown): InboundMessage => raw as InboundMessage,
+      parseInbound: mapRawToInboundMessage,
       formatOutbound: (message: OutboundMessage): unknown => message,
       validate: (message: unknown): boolean => !!message,
       sanitize: (text: string): string => text,

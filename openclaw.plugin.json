@@ -50,9 +50,21 @@
               "type": "string",
               "description": "Account-specific API URL (overrides default)"
             },
+            "channelId": {
+              "type": "string",
+              "description": "Account-specific Channel ID (overrides default)"
+            },
+            "secret": {
+              "type": "string",
+              "description": "Account-specific channel secret (overrides default)"
+            },
             "accessToken": {
               "type": "string",
               "description": "Account-specific access token (overrides default)"
+            },
+            "timeout": {
+              "type": "number",
+              "description": "Account-specific request timeout in milliseconds"
             }
           },
           "required": ["accountId"]
@@ -68,14 +80,25 @@
     },
     "apiUrl": {
       "label": "API URL",
-      "placeholder": "https://api.example.com",
-      "description": "Default Chatu API base URL"
+      "placeholder": "https://your-webhub.example.com",
+      "description": "WebHub service base URL"
+    },
+    "channelId": {
+      "label": "Channel ID",
+      "placeholder": "wh_ch_xxxxxx",
+      "description": "Channel ID from the WebHub admin panel"
+    },
+    "secret": {
+      "label": "Channel Secret",
+      "sensitive": true,
+      "placeholder": "wh_secret_xxxxxxxxxx",
+      "description": "Channel secret for registration"
     },
     "accessToken": {
       "label": "Access Token",
       "sensitive": true,
-      "placeholder": "Your API access token",
-      "description": "Default access token for API authentication"
+      "placeholder": "wh_xxxxxxxxxxxxxxxx",
+      "description": "Access token for API authentication"
     },
     "timeout": {
       "label": "Timeout (ms)",
