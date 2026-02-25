@@ -67,11 +67,14 @@ openclaw extensions install @openclaw/chatu
 # Enable the channel
 openclaw config set channels.chatu.enabled true
 
-# Set Chatu service URL (provided by your Website)
-openclaw config set channels.chatu.webhookUrl "https://your-website.com/chatu"
+# Set Chatu service API URL (provided by your Website)
+openclaw config set channels.chatu.apiUrl "https://your-website.com"
 
 # Set access token (provided by your Website)
 openclaw config set channels.chatu.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
+
+# Apply changes
+openclaw gateway restart
 ```
 
 ### 2.2 Full Configuration
@@ -82,32 +85,14 @@ openclaw config set channels.chatu.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
     chatu: {
       enabled: true,
       
-      // Chatu service URL [Required]
-      webhookUrl: "https://your-website.com/chatu",
+      // Chatu service API base URL [Required]
+      apiUrl: "https://your-website.com",
       
       // Access token [Required]
       accessToken: "wh_eyJhbGciOiJIUzI1NiIs...",
       
       // Request timeout (ms) [Optional]
       timeout: 30000,
-      
-      // Retry settings [Optional]
-      retry: {
-        maxAttempts: 3,
-        backoffMs: 1000
-      },
-      
-      // Message settings [Optional]
-      message: {
-        maxLength: 10000,
-        allowedFormats: ["plain", "markdown"]
-      },
-      
-      // Security settings [Optional]
-      security: {
-        signatureKey: "your-webhook-secret",
-        signatureAlgorithm: "sha256"
-      }
     }
   }
 }
@@ -117,11 +102,12 @@ openclaw config set channels.chatu.accessToken "wh_eyJhbGciOiJIUzI1NiIs..."
 
 ```bash
 # Alternative: Use environment variables
-export CHATU_WEBHOOK_URL="https://your-website.com/chatu"
+export CHATU_URL="https://your-website.com"
 export CHATU_ACCESS_TOKEN="wh_eyJhbGciOiJIUzI1NiIs..."
 
 # Then configure
 openclaw config set channels.chatu.enabled true
+openclaw gateway restart
 ```
 
 ---
@@ -137,7 +123,7 @@ openclaw channels status chatu
 # Output example:
 # Channel: chatu
 # Status: enabled
-# Webhook URL: https://your-website.com/chatu
+# API URL: https://your-website.com
 # Connection: testing...
 ```
 
@@ -149,7 +135,7 @@ openclaw channels test chatu
 
 # Output example:
 # ✓ Chatu channel enabled
-# ✓ Webhook URL: https://your-website.com/chatu
+# ✓ API URL: https://your-website.com
 # ✓ Connection: OK
 # ✓ Last ping: 2024-02-06 21:45:00
 ```
@@ -193,7 +179,7 @@ npm uninstall -g @openclaw/chatu
 
 | Issue | Solution |
 |-------|----------|
-| Connection timeout | Check `webhookUrl` is correct and accessible |
+| Connection timeout | Check `apiUrl` is correct and accessible |
 | 401 Unauthorized | Verify `accessToken` is valid |
 | 403 Forbidden | Check token permissions |
 | Messages not arriving | Verify webhook endpoint is configured |
