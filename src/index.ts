@@ -262,7 +262,7 @@ export default function (api: OpenClawPluginApi) {
       content: { text: params.text, format: 'plain' },
       timestamp: Date.now(),
     };
-    if (params.replyTo) payload.replyTo = params.replyTo;
+    if (params.replyTo) payload.replyTo = { id: params.replyTo };
     if (params.mediaUrl) {
       payload.media = [{ type: params.mediaType ?? 'file', url: params.mediaUrl }];
     }
@@ -393,7 +393,7 @@ export default function (api: OpenClawPluginApi) {
   async function relayCrossChannelMessage(params: {
     sourceChannel: string;
     direction: 'inbound' | 'outbound';
-    senderName: string;
+    sender: { id?: string; name: string };
     content: string;
     sessionKey: string;
     accountId?: string | null;
@@ -417,7 +417,7 @@ export default function (api: OpenClawPluginApi) {
           body: JSON.stringify({
             sourceChannel: params.sourceChannel,
             direction: params.direction,
-            senderName: params.senderName,
+            sender: params.sender,
             content: params.content,
             sessionKey: params.sessionKey,
             ...(params.dedupId ? { dedupId: params.dedupId } : {}),
@@ -456,13 +456,14 @@ export default function (api: OpenClawPluginApi) {
   async function dispatchUserMessage(params: {
     id: string;
     content: string;
-    senderId: string;
-    senderName?: string;
+    sender: { id?: string; name?: string };
     timestamp?: number;
     accountId: string;
     cfg: any;
   }): Promise<void> {
-    const { id, content, senderId, senderName, timestamp, accountId, cfg } = params;
+    const { id, content, sender, timestamp, accountId, cfg } = params;
+    const senderId = sender.id ?? 'user';
+    const senderName = sender.name;
 
     if (!content?.trim()) return;
 
@@ -748,8 +749,7 @@ export default function (api: OpenClawPluginApi) {
       await dispatchUserMessage({
         id: msg.id,
         content: text,
-        senderId,
-        senderName,
+        sender: { id: senderId, name: senderName ?? undefined },
         timestamp: msg.timestamp,
         accountId: ctx.accountId,
         cfg: freshCfg,
@@ -931,8 +931,10 @@ export default function (api: OpenClawPluginApi) {
           await dispatchUserMessage({
             id: msg.id,
             content: msg.content ?? msg.text ?? '',
-            senderId: msg.senderId ?? msg.sender?.id ?? 'user',
-            senderName: msg.senderName ?? msg.sender?.name,
+            sender: {
+              id: (msg as any).sender?.id ?? 'user',
+              name: (msg as any).sender?.name,
+            },
             timestamp: msg.createdAt
               ? new Date(msg.createdAt).getTime()
               : Date.now(),
@@ -1450,7 +1452,7 @@ export default function (api: OpenClawPluginApi) {
       relayCrossChannelMessage({
         sourceChannel,
         direction,
-        senderName,
+        sender: { name: senderName },
         content: content.trim(),
         sessionKey,
         accountId: null,
@@ -1512,7 +1514,7 @@ export function computeBackoffMs(
  * @param accessToken    - Channel access token (`X-Access-Token`)
  * @param sourceChannel  - Originating channel id  (e.g. 'tui', 'whatsapp')
  * @param direction      - 'inbound' (AI reply) or 'outbound' (user message)
- * @param senderName     - Display name of the sender
+ * @param sender         - Sender object: name required, id optional (cross-channel may lack user ID)
  * @param content        - Text content of the message
  * @param sessionKey     - Session key in the originating channel
  * @param timeoutMs      - Fetch timeout in milliseconds (default 30 s)
@@ -1522,7 +1524,7 @@ export async function relayCrossChannelMessage(
   accessToken: string,
   sourceChannel: string,
   direction: 'inbound' | 'outbound',
-  senderName: string,
+  sender: { id?: string; name: string },
   content: string,
   sessionKey: string,
   timeoutMs: number = 30_000,
@@ -1536,7 +1538,7 @@ export async function relayCrossChannelMessage(
         'Content-Type': 'application/json',
         'X-Access-Token': accessToken,
       },
-      body: JSON.stringify({ sourceChannel, direction, senderName, content, sessionKey }),
+      body: JSON.stringify({ sourceChannel, direction, sender, content, sessionKey }),
       signal: ctrl.signal,
     });
     clearTimeout(timer);

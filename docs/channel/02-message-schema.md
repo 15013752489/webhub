@@ -119,11 +119,15 @@ interface InboundMessage {
   /** 通道标识 [Channel SDK 标准] */
   channel: string;
   
-  /** 发送者 ID [Channel SDK 标准] */
-  authorId: string;
-  
-  /** 发送者显示名 [Channel SDK 标准] */
-  authorDisplayName?: string;
+  /** 发送者对象 [Channel SDK 标准] */
+  sender: {
+    /** 发送者 ID */
+    id: string;
+    /** 发送者显示名 */
+    displayName?: string;
+    /** 头像 URL */
+    avatarUrl?: string;
+  };
   
   /** 消息文本内容 [Channel SDK 标准] */
   content: string;
@@ -134,8 +138,11 @@ interface InboundMessage {
   /** 媒体附件 [Channel SDK 标准] */
   media?: Media[];
   
-  /** 回复的消息 ID [Channel SDK 标准] */
-  replyTo?: string;
+  /** 回复引用 [Channel SDK 标准] */
+  replyTo?: {
+    messageId: string;
+    quotedText?: string;
+  };
 }
 
 /**
@@ -973,9 +980,10 @@ interface WebHubInboundMessage {
   
   /** 回复信息 [Website 定义] */
   replyTo?: {
-    messageId: string;
-    senderId: string;
-    text?: string;
+    /** 回复的消息 ID */
+    id: string;
+    /** 引用文本 */
+    quoteText?: string;
   };
   
   /** 线程信息 [Website 定义] */
@@ -1113,7 +1121,7 @@ Website REST API [Website 定义]
 │  InboundMessage [Channel SDK 标准] │
 │  {                          │
 │    id: string,              │
-│    authorId: string,        │
+│    sender: { id, displayName },│
 │    content: string,          │
 │    timestamp: number        │
 │  }                          │
