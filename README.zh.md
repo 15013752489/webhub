@@ -14,7 +14,7 @@ Chatu 是一个灵活的频道插件，让 OpenClaw 能与任意基于 HTTP/WebS
 
 ```bash
 # 从 npm 安装（推荐）
-openclaw plugins install @openclaw/chatu
+openclaw plugins install @chatu-ai/webhub
 
 # 或从源码安装（用于开发）
 git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git

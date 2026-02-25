@@ -12,10 +12,10 @@
 
 ```bash
 # Install as OpenClaw plugin
-openclaw plugins install @openclaw/chatu
+openclaw plugins install @chatu-ai/webhub
 
 # Or using npm directly (if publishing to npm)
-npm install -g @openclaw/chatu
+npm install -g @chatu-ai/webhub
 ```
 
 ### 1.2 From Source
@@ -166,7 +166,7 @@ openclaw config unset channels.chatu
 
 ```bash
 # Remove from OpenClaw
-openclaw plugins uninstall @openclaw/chatu
+openclaw plugins uninstall @chatu-ai/webhub
 ```
 
 ---
@@ -214,7 +214,7 @@ openclaw help
 
 ```bash
 # Update to latest version
-openclaw plugins update @openclaw/chatu
+openclaw plugins update @chatu-ai/webhub
 ```
 
 ### 6.2 Check Version

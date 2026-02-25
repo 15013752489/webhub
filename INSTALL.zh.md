@@ -12,10 +12,10 @@
 
 ```bash
 # 作为 OpenClaw 插件安装
-openclaw plugins install @openclaw/chatu
+openclaw plugins install @chatu-ai/webhub
 
 # 或直接使用 npm 全局安装
-npm install -g @openclaw/chatu
+npm install -g @chatu-ai/webhub
 ```
 
 ### 1.2 从源码安装
@@ -166,7 +166,7 @@ openclaw config unset channels.chatu
 
 ```bash
 # 从 OpenClaw 中移除
-openclaw plugins uninstall @openclaw/chatu
+openclaw plugins uninstall @chatu-ai/webhub
 ```
 
 ---
@@ -214,7 +214,7 @@ openclaw help
 
 ```bash
 # 更新到最新版本
-openclaw plugins update @openclaw/chatu
+openclaw plugins update @chatu-ai/webhub
 ```
 
 ### 6.2 检查版本

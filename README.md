@@ -14,7 +14,7 @@ Chatu is a flexible channel plugin that enables OpenClaw to communicate with any
 
 ```bash
 # From npm (recommended)
-openclaw plugins install @openclaw/chatu
+openclaw plugins install @chatu-ai/webhub
 
 # Or from source (for development)
 git clone https://github.com/chatu-ai/openclaw-web-hub-channel.git

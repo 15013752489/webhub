@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/chatu",
+  "name": "@chatu-ai/webhub",
   "version": "0.1.1",
   "description": "OpenClaw Channel SDK - Build custom channel plugins",
   "main": "dist/index.js",
@@ -22,7 +22,7 @@
       ]
     },
     "install": {
-      "npmSpec": "@openclaw/chatu",
+      "npmSpec": "@chatu-ai/webhub",
       "defaultChoice": "npm"
     }
   },
