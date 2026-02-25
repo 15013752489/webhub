@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/chatu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "OpenClaw Channel SDK - Build custom channel plugins",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
