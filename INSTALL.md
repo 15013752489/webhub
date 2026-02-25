@@ -1,5 +1,7 @@
 # Chatu Channel Installation Guide
 
+**English | [中文](INSTALL.zh.md)**
+
 > This guide covers installing the Chatu channel to connect OpenClaw with any Website.
 
 ---

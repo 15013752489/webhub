@@ -1,0 +1,53 @@
+name: Publish to npm
+
+# Triggered when a version tag is pushed (e.g. v0.1.1, v1.2.3)
+# To publish a new version, run one of:
+#   npm run release:patch   (0.1.0 → 0.1.1)
+#   npm run release:minor   (0.1.0 → 0.2.0)
+#   npm run release:major   (0.1.0 → 1.0.0)
+#
+# These scripts bump package.json, commit the change, create a git tag,
+# and push — which triggers this workflow.
+#
+# Required secret: NPM_TOKEN
+#   1. Create an Automation token at https://www.npmjs.com/settings/<user>/tokens
+#   2. Add it to GitHub: Settings → Secrets and variables → Actions → NPM_TOKEN
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

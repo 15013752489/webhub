@@ -1,5 +1,7 @@
 # OpenClaw Chatu Channel Plugin
 
+**English | [中文](README.zh.md)**
+
 Official OpenClaw channel plugin for connecting to any website via HTTP/WebSocket.
 
 ## What is Chatu Channel?
@@ -251,9 +253,34 @@ openclaw logs
 ## Documentation
 
 For detailed documentation, see:
-- [Installation Guide](INSTALL.md)
+- [Installation Guide](INSTALL.md) | [安装指南](INSTALL.zh.md)
 - [Channel Documentation](docs/channel/README.md)
 - [OpenClaw Plugin Docs](https://docs.openclaw.ai/plugin)
+
+## Publishing to npm
+
+This project uses GitHub Actions to automatically publish to npm. See the [publish workflow](.github/workflows/publish.yml) for details.
+
+**Setting up the required npm Secret:**
+
+1. Log in to [npmjs.com](https://www.npmjs.com) and generate an **Automation** Access Token
+2. Add a Secret in your GitHub repository: `Settings → Secrets and variables → Actions → New repository secret`
+3. Secret name: `NPM_TOKEN`, value: your npm Access Token
+
+**How to publish a new version:**
+
+```bash
+# Bump patch version and publish (e.g. 0.1.0 → 0.1.1)
+npm run release:patch
+
+# Bump minor version and publish (e.g. 0.1.0 → 0.2.0)
+npm run release:minor
+
+# Bump major version and publish (e.g. 0.1.0 → 1.0.0)
+npm run release:major
+```
+
+Running a `release:*` script bumps the version in `package.json`, creates a git tag, and pushes it — which triggers the GitHub Actions workflow to build and publish to npm.
 
 ## License
 
