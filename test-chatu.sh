@@ -2,14 +2,28 @@
 
 # OpenClaw Chatu Channel - 快速测试脚本
 # 
-# 使用方法: ./test-chatu.sh
+# 使用方法:
+#   CHANNEL_ID=<uuid> ACCESS_TOKEN=<wh_xxxxxxxx> ./test-chatu.sh
+#   BASE_URL=http://your-server:3000 CHANNEL_ID=<uuid> ACCESS_TOKEN=<wh_xxxxxxxx> ./test-chatu.sh
 
 set -e
 
-# 配置
-BASE_URL="http://localhost:3000"
-CHANNEL_ID="72add9a2-bc18-4c4d-98c1-46ca38b6911e"
-ACCESS_TOKEN="wh_0dbafcfeea544deb8750916a377c5523"
+# 配置 (可通过环境变量覆盖)
+BASE_URL="${BASE_URL:-http://localhost:3000}"
+CHANNEL_ID="${CHANNEL_ID:-}"
+ACCESS_TOKEN="${ACCESS_TOKEN:-}"
+
+if [[ -z "$CHANNEL_ID" || -z "$ACCESS_TOKEN" ]]; then
+  echo "❌ 缺少必要的环境变量"
+  echo ""
+  echo "请先设置 CHANNEL_ID 和 ACCESS_TOKEN:"
+  echo "  export CHANNEL_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  echo "  export ACCESS_TOKEN=wh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  echo ""
+  echo "或合并到一行执行:"
+  echo "  CHANNEL_ID=<uuid> ACCESS_TOKEN=<wh_xxx> ./test-chatu.sh"
+  exit 1
+fi
 
 echo "================================"
 echo "OpenClaw Chatu Channel 测试脚本"
