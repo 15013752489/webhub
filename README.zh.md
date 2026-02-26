@@ -1,5 +1,11 @@
 # OpenClaw Chatu 频道插件
 
+[![CI](https://github.com/chatu-ai/openclaw-web-hub-channel/actions/workflows/ci.yml/badge.svg)](https://github.com/chatu-ai/openclaw-web-hub-channel/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@chatu-ai/webhub)](https://www.npmjs.com/package/@chatu-ai/webhub)
+[![npm downloads](https://img.shields.io/npm/dm/@chatu-ai/webhub)](https://www.npmjs.com/package/@chatu-ai/webhub)
+[![License: MIT](https://img.shields.io/github/license/chatu-ai/openclaw-web-hub-channel)](./LICENSE)
+[![Node.js](https://img.shields.io/node/v/@chatu-ai/webhub?label=Node.js)](https://nodejs.org/)
+
 **[English](README.md) | 中文**
 
 官方 OpenClaw 频道插件，通过 HTTP/WebSocket 连接任意网站。

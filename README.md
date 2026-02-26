@@ -1,5 +1,11 @@
 # OpenClaw Chatu Channel Plugin
 
+[![CI](https://github.com/chatu-ai/openclaw-web-hub-channel/actions/workflows/ci.yml/badge.svg)](https://github.com/chatu-ai/openclaw-web-hub-channel/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@chatu-ai/webhub)](https://www.npmjs.com/package/@chatu-ai/webhub)
+[![npm downloads](https://img.shields.io/npm/dm/@chatu-ai/webhub)](https://www.npmjs.com/package/@chatu-ai/webhub)
+[![License: MIT](https://img.shields.io/github/license/chatu-ai/openclaw-web-hub-channel)](./LICENSE)
+[![Node.js](https://img.shields.io/node/v/@chatu-ai/webhub?label=Node.js)](https://nodejs.org/)
+
 **English | [中文](README.zh.md)**
 
 Official OpenClaw channel plugin for connecting to any website via HTTP/WebSocket.
